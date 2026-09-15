@@ -1,0 +1,28 @@
+# Godot's import cache and editor state — regenerated on first open.
+.godot/
+*.translation
+
+# Python bytecode from the Blender asset tools.
+tools/__pycache__/
+__pycache__/
+*.pyc
+
+# Scratch output from the probes and screenshot harness.
+/out/
+/tmp/
+*.tmp
+
+# Screenshots from the harness, the probes and the critic loop (docs/CRITIC.md,
+# docs/critic_log.md): hundreds of megabytes of evidence, regenerated on demand
+# with the args the critic log records.
+renders/
+
+# An iOS export dropped into the project folder by mistake.
+*.xcodeproj/
+*.xcframework/
+*.xcworkspace/
+*.pck
+*.ipa
+
+# macOS Finder litter.
+.DS_Store

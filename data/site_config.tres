@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="SiteConfig" load_steps=2 format=3]
+
+; Every feel number for the driveway job (DESIGN 4). Edit the values here - or
+; in the Inspector - and the game changes; no code touched.
+;
+; This file deliberately starts EMPTY of overrides, so every number is the
+; documented default in scripts/site_config.gd and the two cannot disagree. The
+; moment a number is tuned it appears below, and from then on THIS file is what
+; the game uses: the trap from Car Garage is editing a script default and
+; wondering why nothing moved, because the .tres still held the old value.
+
+[ext_resource type="Script" path="res://scripts/site_config.gd" id="1_cfg"]
+
+[resource]
+script = ExtResource("1_cfg")

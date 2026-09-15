@@ -1,0 +1,1962 @@
+extends Node
+## Plays the WHOLE driveway job with no human at the keyboard, through the same
+## public doors a finger comes in by, and asserts the WORLD at every phase.
+##
+##   godot --headless --path . res://scenes/dev/site_smoke.tscn
+##
+## Prints one line per check, then SITE_SMOKE PASS n/n, and exits 0 / 1.
+##
+## The point is not that the code runs: it is that the driveway really gets
+## BUILT. Every phase is checked against the thing it is supposed to have
+## changed - eighteen bites break six panels, the pad is cleared, four boards and
+## ten stakes go in, the base fills, the form fills, the slab is struck off flat,
+## all of it is wetted, two joints are cut, all of it is broomed - because a job
+## that plays through with nothing happening to the concrete is exactly the bug a
+## smoke test is for.
+##
+## It also asserts the things the user's ten playtest notes were about, because
+## those are the ones that will rot first: that the machines never stand inside a
+## building, that the skid steer never drives through the rubble at the height it
+## started at, that the truck goes away during the pour and comes back, and that
+## the hose and the broom do nothing at all where the finger has not been.
+##
+## Timing note: a headless frame is about 7 ms of real time, so anything paced in
+## SECONDS takes hundreds of frames. Nothing here counts frames to decide a beat
+## is done; it waits on the runner's own step index, with a cap so a stall is a
+## failure rather than a hang.
+
+## How long a single wait may take before it is called a stall. A headless frame
+## is about 7 ms, so this is a minute - far longer than any beat in the job, and
+## short enough that two stalls do not eat the whole run's time budget and turn a
+## clear list of failures into one useless timeout.
+const FRAME_CAP := 9000
+
+var _checks: int = 0
+var _failures: int = 0
+var main: SiteMain
+var hud: SiteHud
+var runner: JobRunner
+var drive: Driveway
+var rings: SpotRings
+var _job_done: int = 0
+## How many frames the mixer's rearmost tyre stood on the pad while it was
+## pouring: it must be zero, the steel is under there.
+var _on_pad_frames: Array = [0]
+var _watch_pad: bool = false
+## What was heard the moment each step finished: [step index, last group].
+var _done_notes: Array = []
+## The job's whole length in progress stops: the bar measures the child's
+## minutes, not their taps (the plan's 3.6), and the three places that named
+## this number (the .tres header, DESIGN 2, the code) had all disagreed.
+const TOTAL_STOPS := 74
+## When the second push ended, so the forms' start can be timed against it.
+var _push_ended_ms: int = 0
+
+
+func _ready() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	# The headless window is not the shipped 16:9 picture (Tree Crew measured a
+	# square), and every "is it inside the frame" check below projects through
+	# the live camera - so give it the real frame first, or a pair of stakes the
+	# full width of the form apart fails a check the real screen passes.
+	get_window().size = Vector2i(1280, 720)
+	await get_tree().process_frame
+	print("  frame %s" % str(get_viewport().get_visible_rect().size))
+	var packed: PackedScene = load("res://scenes/site.tscn")
+	main = packed.instantiate() as SiteMain
+	add_child(main)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	hud = main.hud
+	runner = main.runner
+	drive = main.drive
+	rings = main.get_node_or_null("Rings") as SpotRings
+	main.job_done.connect(func() -> void: _job_done += 1)
+	# Connected AFTER the level's own handler, so what is heard here is what
+	# the level played for the step's end (the plan's 1.6).
+	runner.step_done.connect(func(i: int) -> void: _done_notes.append([i, main.sfx.last_played]))
+
+	# Awaited: the setup waits real seconds for the idle arrow now, and without
+	# the await the jackhammer phase ran underneath it.
+	await _the_setup()
+	await _phase_jackhammer()
+	await _phase_push()
+	# The stakes are the back half of `_phase_forms`: they are the same boards and
+	# the same hole, so they are checked together.
+	await _phase_forms()
+	await _phase_base()
+	await _phase_rebar()
+	await _phase_pour()
+	await _phase_rake()
+	await _phase_finishing()
+	await _the_payoff()
+	await _the_second_job()
+
+	for i in range(10):
+		await get_tree().process_frame
+	print("SITE_SMOKE %s %d/%d" % ["PASS" if _failures == 0 else "FAIL", _checks - _failures, _checks])
+	get_tree().quit(0 if _failures == 0 else 1)
+
+
+# --- What the level is before anything is done to it -----------------------------------------
+
+func _the_setup() -> void:
+	_check(main.job != null, "the job loaded")
+	# No AudioStreamGenerator anywhere in the site (the improvement plan's 0.2):
+	# its playback keeps a raw pointer to it, and a site freed under one - which
+	# is what NEXT and the house do - crashes the audio thread without a word.
+	var players := 0
+	var generators := 0
+	for p in main.find_children("*", "AudioStreamPlayer", true, false):
+		players += 1
+		if (p as AudioStreamPlayer).stream is AudioStreamGenerator:
+			generators += 1
+	_check(players > 0 and generators == 0,
+		"no sound in the site plays off an AudioStreamGenerator (%d players, %d generators)" % [players, generators])
+	_check(runner.step_count() == 18, "it has all eighteen beats (%d)" % runner.step_count())
+	_check(hud.total_steps() == main.job.total_weight(),
+		"the bar is set to this job's %d stops (%d)" % [main.job.total_weight(), hud.total_steps()])
+	_check(main.job.total_weight() == TOTAL_STOPS,
+		"and the job is %d stops long, weighted by the child's minutes (%d)" % [TOTAL_STOPS, main.job.total_weight()])
+	# The job OPENS on the wide (the plan's 3.1): the house, the cracked drive,
+	# the tools, and the first slab's three rings lit in it.
+	_check(main.rig.current_shot() == CameraRig.WIDE, "the job opens on the WIDE")
+	_check(rings != null and rings.count() == 3 and _all_rings_on_screen(),
+		"with the first slab's three rings lit in it")
+	_check(drive != null and drive.panel_count() == 4, "the old drive is four panels (%d)" % drive.panel_count())
+	_check(drive.jack_spots() == 12, "worked at twelve places, three per panel (%d)" % drive.jack_spots())
+	_check(drive.form_count() == 4, "four boards (%d)" % drive.form_count())
+	_check(drive.stake_count() == 10, "and TEN stakes, one blow each - none on the expansion strip (%d)" % drive.stake_count())
+	_check(drive.bar_count() == 12, "twelve bars of steel to lay (%d)" % drive.bar_count())
+	_check(drive.bars_in() == 0 and not drive.chairs_shown(), "none of it down yet")
+	var skid0 := main.machine("SkidSteer")
+	_check(skid0 != null and skid0.has_blade(),
+		"the skid steer has the PUSH BLADE on, not the bucket")
+	# And the bucket is really gone from the picture: Godot imports the fleet's
+	# `Bucket` as the mesh ITSELF, so the pin and every mesh under it (the blade's
+	# own apart) must be off every render layer. A loop over the pin's
+	# descendants alone hid nothing, and the bucket's floor hung out below the
+	# blade in every frame (2026-09-15). Own flags, not `is_visible_in_tree`: the
+	# machine is off-stage and hidden as a whole here.
+	var bucket_drawn := 0
+	var blade_drawn := 0
+	var pin: Node3D = skid0.node_for("Bucket") if skid0 != null else null
+	if pin != null:
+		var pin_meshes: Array[Node] = [pin]
+		pin_meshes.append_array(pin.find_children("*", "MeshInstance3D", true, false))
+		for n in pin_meshes:
+			if not (n is MeshInstance3D):
+				continue
+			var mi := n as MeshInstance3D
+			var under_blade := false
+			var at: Node = mi
+			while at != null and at != pin:
+				if String(at.name) == "PushBlade":
+					under_blade = true
+					break
+				at = at.get_parent()
+			var drawn := mi.layers != 0 and mi.visible
+			if under_blade:
+				blade_drawn += 1 if drawn else 0
+			elif drawn:
+				bucket_drawn += 1
+	_check(pin != null and bucket_drawn == 0 and blade_drawn > 0,
+		"and the bucket's own mesh is off the render layers under the blade (%d bucket meshes drawn, %d blade)" % [bucket_drawn, blade_drawn])
+	_check(drive.fill_fraction() < 0.001, "and no concrete in it yet (%.3f)" % drive.fill_fraction())
+	# The fault has to be visible BEFORE the first tap, as shape and not as tint -
+	# and a crack has to be a crack, which means it is not a straight line.
+	var damage := 0
+	var straight := 0
+	for i in range(1, drive.panel_count() + 1):
+		var node := drive.panel_marker(i).get_parent()
+		var angles: Dictionary = {}
+		for child in node.get_children():
+			var n := String(child.name)
+			if n.begins_with("OldCrack") or n.begins_with("Stain"):
+				damage += 1
+			if n.begins_with("OldCrack"):
+				angles[snappedf((child as Node3D).rotation.y, 0.01)] = true
+		# A zigzag's segments point in several directions; one straight box points
+		# in exactly one.
+		if angles.size() < 3:
+			straight += 1
+	_check(damage >= drive.panel_count() * 3,
+		"every panel arrives already cracked and stained (%d pieces of damage)" % damage)
+	_check(straight == 0, "and every crack on it ZIGZAGS (%d panels with a straight one)" % straight)
+	# The fault has a SHAPE from the wide (the improvement plan's 4.1): weeds in
+	# the old cracks, measured in the opening WIDE's own pixels - and none of them
+	# under a lit ring AS THE WIDE DRAWS IT, a billboard's gold band in pixels
+	# round the ring's point at its largest pulse (a tuft 0.3 m past a spot on the
+	# ground was under the gold: the session-4 verification pass) - and the first
+	# slab settled a step below its neighbour.
+	var fr0 := main.camera.get_viewport().get_visible_rect().size
+	var cam0 := main.camera
+	var bands: Array[Vector3] = []
+	for rp in rings.points():
+		var fit := clampf(cam0.global_position.distance_to(rp) / SpotRings.NOMINAL_M, 0.5, 3.0)
+		var size_m: float = main.config.ring_spot * fit
+		var c := cam0.unproject_position(rp)
+		var right := cam0.global_transform.basis.x
+		var r_in := c.distance_to(cam0.unproject_position(rp + right * 0.56 * 0.5 * size_m * 0.87))
+		var r_out := c.distance_to(cam0.unproject_position(rp + right * 0.90 * 0.5 * size_m * 1.13))
+		bands.append(Vector3(c.x, c.y, 0.0))
+		bands.append(Vector3(r_in, r_out, 0.0))
+	var few := 0
+	var shortest := INF
+	var under_gold := 0
+	for i in range(1, drive.panel_count() + 1):
+		var tufts := drive.panel_weeds(i)
+		if tufts.size() < 3:
+			few += 1
+		for tuft in tufts:
+			var tip_l: Vector3 = tuft.get_meta("tip", Vector3.UP * 0.14)
+			var tip_w := tuft.global_transform * tip_l
+			shortest = minf(shortest, _px_rows(tuft.global_position, tip_w) * 720.0 / fr0.y)
+			for bi in range(0, bands.size(), 2):
+				var centre := Vector2(bands[bi].x, bands[bi].y)
+				for p_w: Vector3 in [tuft.global_position, tip_w]:
+					var d := cam0.unproject_position(p_w).distance_to(centre)
+					if d >= bands[bi + 1].x and d <= bands[bi + 1].y:
+						under_gold += 1
+	_check(few == 0 and shortest >= 6.0 and under_gold == 0 and bands.size() == 6,
+		"every slab has weeds in its cracks, the shortest %.1f px tall on the wide, none under a lit ring's gold (%d thin slabs, %d under)"
+		% [shortest, few, under_gold])
+	var step0 := drive.panel_top_at(2, Vector2(-0.5, 0.0)) - drive.panel_top_at(1, Vector2(0.5, 0.0))
+	var settled_spots := 0
+	for s in range(1, Driveway.SPOTS_PER_PANEL + 1):
+		if drive.spot_marker(s).global_position.y < -0.005:
+			settled_spots += 1
+	_check(step0 >= 0.045 and settled_spots == Driveway.SPOTS_PER_PANEL,
+		"the first slab has settled a step below its neighbour at the seam (%.3f m), all its spots on the settled slab"
+		% step0)
+	# The spots the hammer works are three DIFFERENT places, not one spot thrice.
+	var spread := 0.0
+	for sp in range(1, 4):
+		var a := drive.spot_marker(sp)
+		for sq in range(sp + 1, 4):
+			spread = maxf(spread, a.global_position.distance_to(drive.spot_marker(sq).global_position))
+	_check(spread > 0.7, "the three spots on a panel are a tap apart (%.2f m)" % spread)
+	# The white idle arrow (fourth playtest): nothing for a while and it stands
+	# over the first ring, white, miming a tap; the first touch takes it away.
+	var delay_was: float = hud.hint_delay
+	hud.hint_delay = 0.3
+	# Real seconds, not frames: the idle clock is wall time and a headless
+	# frame is a fraction of a millisecond.
+	await get_tree().create_timer(0.7).timeout
+	_check(hud.hint_visible(), "after a pause the white idle arrow is up")
+	var hp := hud.hint_position()
+	var fr := main.camera.get_viewport().get_visible_rect().size
+	_check(hp != Vector2.INF and hp.x > 0.0 and hp.y > 0.0 and hp.x < fr.x and hp.y < fr.y,
+		"inside the picture (%s)" % str(hp))
+	var hc := hud.hint_color_now()
+	_check(hc.r > 0.95 and hc.g > 0.95 and hc.b > 0.95, "and it is WHITE")
+	_check(hud.hint_kind() == SiteHud.Hint.TAP, "miming a tap")
+	_check(rings.count() == 3, "with all three rings still up under it (%d)" % rings.count())
+	var tip0 := hud.hint_tip_now()
+	await get_tree().create_timer(0.4).timeout
+	_check(hud.hint_tip_now().distance_to(tip0) > 3.0, "and it moves")
+	# A MISS does not take it away: the child who taps the wrong thing is the
+	# one it is for (the improvement plan's 1.2). An accepted tap does - that is
+	# checked on the first bite, in the jackhammer phase.
+	main._press(Vector2(fr.x * 0.5, fr.y * 0.98), true)
+	main._press(Vector2(fr.x * 0.5, fr.y * 0.98), false)
+	_check(hud.hint_visible(), "a miss leaves it up - it is still needed")
+	hud.hint_wake()
+	# And forget that miss: the jackhammer phase counts its own two, and this
+	# one would make its first the second.
+	hud._last_miss_s = -100.0
+	hud.hint_delay = delay_was
+	# The first touch ends the opening look: the eye comes down to the slab.
+	_check(main.rig.current_shot() == CameraRig.PANEL and main.rig.is_moving(),
+		"and the first touch sends the eye down to the first slab (3.1)")
+	# The places to tap are MARKED, and there are three of them on the first slab.
+	_check(rings != null and rings.count() == 3,
+		"three gold rings are lit on the first slab (%d)" % (rings.count() if rings != null else -1))
+	_check(main.rings_up() and not hud.arrow_visible(),
+		"and the gold arrow stands down while they are")
+	# The garage is a building with a hole in it, and the hole is shut.
+	_check(main.garage_door_k() < 0.01, "the garage door starts shut (%.2f)" % main.garage_door_k())
+	_check(main.get_node_or_null("GarageLintel") != null, "the garage has a real opening in it")
+	# The three machines are off-stage and whole.
+	for kind: String in ["SkidSteer", "DumpTruck", "ConcreteTruck"]:
+		var m := main.machine(kind)
+		_check(m != null and m.missing_nodes.is_empty(),
+			"%s has every node its contract names (%s)" % [kind, _list(m.missing_nodes) if m != null else "no machine"])
+		_check(m != null and not m.visible, "%s waits off-stage until it is called" % kind)
+	_check(runner.current_step().verb == "jack_spot", "and the job opens on the jackhammer")
+
+
+# --- Phase 1: break the old drive out ---------------------------------------------------------
+
+func _phase_jackhammer() -> void:
+	print("--- 1. the jackhammer ---")
+	# A tap MILES from the spot must not do the work (DESIGN 0, the tap rule).
+	var before := runner.progress
+	var away := Vector2(20.0, 20.0)
+	_check(not main.tap_counts(away), "a tap in the corner of the screen does not count")
+	main._press(away, true)
+	main._press(away, false)
+	await _frames(4)
+	_check(runner.progress == before, "so nothing happened (%d)" % runner.progress)
+	_check(hud.arrow_nudged(), "and the arrow bounced to say where to go")
+	# A miss is HEARD, quietly, and answered by the nearest ring throbbing
+	# once; and two misses inside three seconds bring the white mime at once
+	# (the improvement plan's 1.2).
+	_check(main.sfx.last_played == "pop", "and the miss was heard, quietly (%s)" % main.sfx.last_played)
+	_check(rings.nudging(), "and the nearest ring throbbed")
+	_check(not hud.hint_visible(), "the white mime is not up yet")
+	await get_tree().create_timer(0.5).timeout
+	main._press(away, true)
+	main._press(away, false)
+	await get_tree().create_timer(0.3).timeout
+	_check(hud.hint_visible(), "a second miss half a second later brings the white mime at once")
+	_check(runner.waiting_for_tap(), "the hammer is TAPPED, not held")
+	# The three rings on a slab are three DIFFERENT places, and they may be taken
+	# in any order the child likes: the first slab is worked middle, last, first.
+	var lit := rings.points()
+	var spread := 0.0
+	for a in range(lit.size()):
+		for b in range(a + 1, lit.size()):
+			spread = maxf(spread, lit[a].distance_to(lit[b]))
+	_check(spread > 0.7, "the three rings are a tap apart (%.2f m)" % spread)
+	var order := [2, 3, 1]
+	for step in range(3):
+		var id: int = order[step]
+		_check(_tap_ring(id), "ring %d can be pressed (out of order)" % id)
+		if step == 0:
+			# The tap is heard in the frame it lands (the plan's 1.1), it takes
+			# the white mime away, and the ring it chose snaps out while the
+			# other two stay lit (1.3).
+			_check(main.sfx.last_played == "whoosh",
+				"the tap is heard in the frame it lands (%s)" % main.sfx.last_played)
+			_check(not hud.hint_visible(), "and an accepted tap takes the white mime away at once")
+			await _frames(30)
+			_check(rings.count() == 3 and rings.visible_count() == 2,
+				"the ring pressed snapped out and the other two stay lit (%d drawn of %d)"
+				% [rings.visible_count(), rings.count()])
+			# And the HUD steps back while the bite runs (the plan's 3.7): real
+			# seconds, since the ease is wall-clock.
+			await get_tree().create_timer(0.25).timeout
+			_check(hud.chrome_alpha() < 0.6, "the bar steps back while the bite runs (%.2f)" % hud.chrome_alpha())
+		if step == 2:
+			# The third bite: the slab lets go with a HOP, not in a cut (1.5).
+			await _until(func() -> bool: return drive.panels_broken() == 1, "the slab to let go")
+			var chunk := drive._chunks[0] as Node3D
+			var y0 := chunk.global_position.y
+			await get_tree().create_timer(main.config.chunk_hop_time + 0.15).timeout
+			_check(y0 - chunk.global_position.y >= 0.08,
+				"the rubble hopped and settled (%.2f m)" % (y0 - chunk.global_position.y))
+			var weeds_left := 0
+			for w in drive.panel_weeds(1):
+				if w.is_visible_in_tree():
+					weeds_left += 1
+			_check(weeds_left == 0, "and its weeds went with it (%d still drawn)" % weeds_left)
+		await _until(func() -> bool: return not runner.is_busy(), "bite on ring %d" % id)
+		_check(drive.spot_done(id), "and spot %d is the one that got worked" % id)
+		if step == 0:
+			# The bite sinks the settled slab FROM its step, never back up to
+			# level first (4.1).
+			var step1 := drive.panel_top_at(2, Vector2(-0.5, 0.0)) - drive.panel_top_at(1, Vector2(0.5, 0.0))
+			_check(step1 >= Driveway.SETTLE_STEP + main.config.panel_sink / 3.0 - 0.005,
+				"and a bite sinks the settled slab further, from its step (%.3f m)" % step1)
+			await get_tree().create_timer(0.35).timeout
+			_check(hud.chrome_alpha() > 0.9, "and the bar comes back between beats (%.2f)" % hud.chrome_alpha())
+		var want := 3 - (step + 1)
+		if step < 2:
+			_check(rings.count() == want,
+				"%d ring(s) left on the slab (%d)" % [want, rings.count()])
+	_check(drive.panels_broken() == 1,
+		"the slab let go on its third bite, whichever order they came in (%d)" % drive.panels_broken())
+	# A tap that lands while a bite is running is KEPT, and it keeps the RING it
+	# landed on (the improvement plan's 0.4): press the second slab's first ring,
+	# then its LAST while the hammer is still going, and the hammer must walk to
+	# that last one - not to the first open spot, which is the middle one.
+	await _until(func() -> bool:
+		return runner.waiting_for_tap() and not runner.is_busy() and rings.count() == 3,
+		"the second slab's rings")
+	var first := rings.id_at(0)
+	var middle := rings.id_at(1)
+	var last := rings.id_at(2)
+	_check(_tap_ring(first), "the second slab's first ring can be pressed")
+	await _frames(2)
+	_check(runner.is_busy(), "the hammer is going")
+	_check(_tap_ring(last), "and its last ring is pressed while it goes")
+	await _until(func() -> bool: return not runner.is_busy() and drive.spot_done(first), "both bites")
+	_check(drive.spot_done(last), "the kept tap worked the ring it landed on (spot %d)" % last)
+	_check(not drive.spot_done(middle), "and not the first open spot (spot %d is still to do)" % middle)
+	_check(rings.count() == 1, "one ring left on that slab (%d)" % rings.count())
+	# The rest of them, nearest ring first, which is what a child mostly does.
+	#
+	# And the CAMERA WALKS WITH THEM (DESIGN 1a, 2026-09-12: "when you jackhammer
+	# the first section or 2 it then moves to the background to slabs that are
+	# further away the camera needs to move with it"). Eighteen bites are one
+	# step, and a step's shot used to be chosen once when the step was entered -
+	# so the eye stayed on the first panel for the whole phase. What is asked
+	# here is that the eye is in a different place for every panel, and that it
+	# is never further from the panel being worked than the first one was.
+	await _settled()
+	var eyes: Array[Vector3] = [main.camera.global_position]
+	var panel_at := drive.panels_broken()
+	var reach := main.camera.global_position.distance_to(
+		drive.panel_marker(drive.spot_panel(runner.done_in_step + 1)).global_position)
+	var worst := reach
+	var bites := 5
+	var wedge_done := false
+	while drive.panels_broken() < drive.panel_count() and bites < 30:
+		if not await _until(func() -> bool:
+				return runner.waiting_for_tap() and not runner.is_busy() and rings.count() > 0,
+				"the next ring"):
+			break
+		if not _tap_ring(rings.id_at(0)):
+			break
+		await _until(func() -> bool: return not runner.is_busy(), "bite %d" % (bites + 1))
+		bites += 1
+		if drive.panels_broken() != panel_at and drive.panels_broken() < drive.panel_count():
+			panel_at = drive.panels_broken()
+			await _settled()
+			eyes.append(main.camera.global_position)
+			var mark := drive.panel_marker(drive.spot_panel(runner.done_in_step + 1))
+			if mark != null:
+				worst = maxf(worst, main.camera.global_position.distance_to(mark.global_position))
+			if drive.panels_broken() == 2 and not wedge_done:
+				wedge_done = true
+				await _the_wedge()
+				bites += 1
+	var stood := 0
+	for i in range(1, eyes.size()):
+		if eyes[i].distance_to(eyes[i - 1]) < 0.5:
+			stood += 1
+	_check(eyes.size() >= drive.panel_count() - 1 and stood == 0,
+		"the eye moved to every panel as it came up (%d pictures, %d of them the same place)"
+		% [eyes.size(), stood])
+	_check(worst < reach + 0.6,
+		"and never stood further off than it did on the first (%.1f m, first %.1f m)" % [worst, reach])
+	_check(drive.panels_broken() == 4, "all four panels came apart (%d)" % drive.panels_broken())
+	_check(bites == 12, "in twelve bites, three a slab (%d)" % bites)
+	_check(drive.chunks_left() >= 40, "and it left rubble lying in the hole (%d chunks)" % drive.chunks_left())
+	var moved := await _until(func() -> bool: return runner.waiting_button() == "call",
+		"the job to reach the skid steer")
+	_check(moved, "the job moved on to calling the skid steer")
+
+
+# --- Phase 2: the skid steer --------------------------------------------------------------------
+
+func _phase_push() -> void:
+	print("--- 2. the skid steer ---")
+	_check(runner.waiting_button() == "call", "the green button is the answer now")
+	_check(hud.call_is_modelled(), "the call button shows the machine itself, low-poly, not a drawn glyph")
+	_check(hud.button_enabled("call"), "and it is awake")
+	await get_tree().create_timer(0.9).timeout
+	_check(hud.aim_visible(), "and the ring is on the button once the last bite's mute lapses")
+	var skid := main.machine("SkidSteer")
+	# While it crawls up the drive it is crossing broken concrete, so it has to
+	# ride OVER the lumps. "It looks like the skid steer goes through the rocks."
+	var rode := [false]
+	var sank := [0]
+	# A one-element Array, not a bool: a lambda captures a local BY VALUE, so a
+	# plain flag flipped below never reached the loop and it ran for the rest of
+	# the test - and on into a freed site once the second driveway was built.
+	var watching := [true]
+	var watch := func() -> void:
+		while watching[0]:
+			if skid.visible and not skid.is_driving():
+				pass
+			if skid.visible:
+				var floor_y := drive.stand_y(skid.global_position)
+				var ride := drive.ride_y(skid.global_position)
+				if ride > floor_y + 0.03 and skid.global_position.y > floor_y + 0.015:
+					rode[0] = true
+				# Through the FLOOR is a fault; below the floor at its own origin is
+				# not. A machine is seated at its nose AND its tail, so one tipping
+				# down into the excavation legitimately has its middle below the
+				# garage slab its back wheels are still on - and one with its nose up
+				# on a lump sits above the dirt its tail is on. The honest question is
+				# whether any part of it is under the ground.
+				var nose := drive.stand_y(skid.to_global(Vector3(0.0, 0.0, 1.4)))
+				var tail := drive.stand_y(skid.to_global(Vector3(0.0, 0.0, -1.4)))
+				if skid.global_position.y < minf(nose, tail) - 0.05:
+					sank[0] += 1
+			await get_tree().process_frame
+	watch.call()
+	hud.simulate_button("call")
+	var came := await _until(func() -> bool:
+		return skid.visible and not skid.is_driving(), "the skid steer arrives")
+	_check(came, "the skid steer drove on when the button was pressed")
+	_check(main.garage_door_k() > 0.9,
+		"the garage door rolled up for it (%.2f)" % main.garage_door_k())
+	_check(skid.global_position.z < Driveway.Z_APRON - 0.5,
+		"and it is standing INSIDE the garage, lined up on the drive (z %.2f)" % skid.global_position.z)
+	_check(absf(rad_to_deg(skid.rotation.y)) < 6.0,
+		"facing back down it (%.0f deg)" % rad_to_deg(skid.rotation.y))
+	# Its beacon turned on the way in and is dark now it has parked (the
+	# improvement plan's 4.5).
+	_check(not skid.beacon_on() and skid.beacon_level() < 0.01,
+		"its beacon is dark once it has parked (%.2f)" % skid.beacon_level())
+	# The pads are NOT the control any more: this is a finger on the picture.
+	_check(not hud.pad_visible("up"), "the push is press-and-hold, so no pad is up for it")
+	_check(runner.waiting_for_hold(), "and the runner is waiting to be held")
+	var rolled := skid.rolled_m()
+	runner.hold(true)
+	# The engine LEANS INTO THE WORK under the finger and comes back up when
+	# it lifts (the improvement plan's 1.7): read off the loop itself. And the
+	# beacon FLASHES while it works (4.5): lit and dark, not a steady glow.
+	var lit_hi := 0.0
+	var lit_lo := 1.0
+	var lit_t := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - lit_t < 1600:
+		lit_hi = maxf(lit_hi, skid.beacon_level())
+		lit_lo = minf(lit_lo, skid.beacon_level())
+		await get_tree().process_frame
+	_check(skid.beacon_on() and lit_hi > 0.9 and lit_lo < 0.1,
+		"its beacon flashes while it pushes (%.2f to %.2f)" % [lit_lo, lit_hi])
+	var rep: Dictionary = main.sfx.loop_report()
+	_check(rep.has("skid") and float(rep["skid"]["pitch"]) < 0.99,
+		"the skid steer's engine drops a note under the finger (pitch %.2f)"
+		% (float(rep["skid"]["pitch"]) if rep.has("skid") else -1.0))
+	runner.hold(false)
+	await get_tree().create_timer(1.0).timeout
+	rep = main.sfx.loop_report()
+	_check(rep.has("skid") and float(rep["skid"]["pitch"]) > 0.995,
+		"and comes back up when the finger lifts (pitch %.2f)"
+		% (float(rep["skid"]["pitch"]) if rep.has("skid") else -1.0))
+	runner.hold(true)
+	var cleared := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb != "push_rubble", "two passes")
+	runner.hold(false)
+	watching[0] = false
+	_check(cleared, "two passes cleared the pad")
+	_push_ended_ms = Time.get_ticks_msec()
+	_check(skid.edge_width() > 1.9, "with a blade wider than the lane it pushes (%.2f m)" % skid.edge_width())
+	_check(drive.chunks_on_pad() == 0, "and no rubble is left on it (%d)" % drive.chunks_on_pad())
+	_check(rode[0], "it climbed over the broken concrete rather than through it")
+	_check(sank[0] == 0, "and never sank through the ground (%d frames under it)" % sank[0])
+	_check(absf(skid.rolled_m() - rolled) > 8.0,
+		"the wheels turned the distance it covered (%.1f m)" % absf(skid.rolled_m() - rolled))
+
+
+# --- Phases 3 and 4: the forms ------------------------------------------------------------------
+
+func _phase_forms() -> void:
+	print("--- 3. the forms ---")
+	var went := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "form_set", "the forms step")
+	_check(went, "the skid steer left and the boards are next")
+	# The exit is a two-second look, not a beat (the plan's 3.2): the boards'
+	# rings are live within seconds of the second push, while the skid steer
+	# is still trundling off up the street in the background.
+	var since_push := float(Time.get_ticks_msec() - _push_ended_ms) / 1000.0
+	_check(since_push < 4.0, "and they are live %.1f s after the second push ended" % since_push)
+	var skid_out := main.machine("SkidSteer")
+	_check(skid_out != null and skid_out.visible and skid_out.is_driving() and skid_out.beacon_on(),
+		"while the skid steer is still on its way out in the background, beacon turning")
+	# And it goes down the VERGE, never back through the mouth of the hole it
+	# cleared (the session-3 verification pass): watched every frame until gone.
+	var dipped := 0
+	while skid_out != null and skid_out.visible and skid_out.is_driving():
+		var sp := skid_out.global_position
+		var over_pad := absf(sp.x - Driveway.CENTRE_X) < Driveway.WIDTH * 0.5 + 0.2 \
+			and sp.z > Driveway.Z_APRON - 0.5 and sp.z < Driveway.Z_KERB + 0.3
+		if over_pad and sp.y < -0.02:
+			dipped += 1
+		await get_tree().process_frame
+	_check(dipped == 0, "and never dips into the excavation on its way (%d frames over the pad below grade)" % dipped)
+	_check(skid_out != null and not skid_out.visible and not main.sfx.is_looping("leave") \
+		and not skid_out.beacon_on(),
+		"and is gone, its idle stopped and its beacon off, before the boards are done")
+	# The house button is OFF the screen while the job runs (the improvement
+	# plan's 0.1): one tap on it reloaded the whole site, and nothing said so.
+	_check(not hud.home_visible(), "the house button is off the screen while the job runs")
+	var idx := runner.index
+	var boards := drive.forms_in()
+	var prog := runner.progress
+	hud.simulate_home()
+	await _frames(3)
+	_check(runner.index == idx and drive.forms_in() == boards and runner.progress == prog,
+		"and its signal mid-job throws nothing away (step %d, %d boards, %d stops)"
+		% [runner.index, drive.forms_in(), runner.progress])
+	# The boards are set in GROUPS (round 4): the two long boards first, both
+	# marked, in whichever order; then the kerb board; then the strip.
+	_check(rings.count() == 2, "two rings, one on each long board's place (%d)" % rings.count())
+	await _settled()
+	_check(_all_rings_on_screen(), "and every one of them is inside the frame")
+	var seen_f: Array[Vector3] = []
+	var set_n := 0
+	while drive.forms_in() < 4 and set_n < 8:
+		if not await _until(func() -> bool: return runner.waiting_for_tap() and not runner.is_busy(),
+				"the next board"):
+			break
+		var g := drive.current_form_group()
+		var open := drive.open_forms_in(g)
+		if open.is_empty():
+			break
+		var i: int = open[open.size() - 1]
+		_check(_tap_ring(i), "board %d's ring can be pressed" % i)
+		await _until(func() -> bool: return not runner.is_busy(), "board %d lands" % i)
+		_check(drive.form_is_in(i), "and board %d is the one that went in" % i)
+		set_n += 1
+		if drive.current_form_group() != g and drive.forms_in() < 4:
+			await _settled()
+			seen_f.append(main.camera.global_position)
+			_check(_all_rings_on_screen(), "the next group's rings are inside the frame")
+	_check(drive.forms_in() == 4, "all four boards are in (%d)" % drive.forms_in())
+	_check(seen_f.size() >= 2, "and the eye moved to each group of boards (%d moves)" % seen_f.size())
+	print("--- 4. the stakes ---")
+	var on_stakes := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "stake_drive", "the stakes step")
+	_check(on_stakes, "the boards handed over to the stakes")
+	_check(runner.current_step().shot == "STAKE", "the stakes have their own shot")
+	_check(runner.waiting_for_tap(), "and ONE TAP is one stake")
+	# A PAIR at a time, close (DESIGN 1a, 2026-09-12: "the stakes are a wide shot
+	# so you don't get the hammer feeling"). Ten rings in one picture could only
+	# be held from up on the roof, where a 5 cm peg and a swung sledge are a
+	# smudge; the ten are worked in groups across the drive with the eye stepping
+	# down it, and the rings are the live group's.
+	_check(drive.stake_group_count() >= 4,
+		"the ten stakes are cut into groups across the drive (%d)" % drive.stake_group_count())
+	var group_open := drive.open_stakes_in(drive.current_stake_group()).size()
+	_check(rings.count() == group_open and group_open >= 2,
+		"a ring on each stake of the pair being driven, and only those (%d of %d)"
+		% [rings.count(), group_open])
+	await _settled()
+	_check(_all_rings_on_screen(), "and every one of them is inside the frame")
+	# The pegs are standing BEFORE the first blow, and each ring sits on its
+	# painted cap (the improvement plan's 4.2): they used to appear on the first
+	# blow, so the first pair's rings floated over bare earth.
+	var capped_rings := 0
+	var ring_pts: Array[Vector3] = rings.points().duplicate()
+	var ring_open := drive.open_stakes_in(drive.current_stake_group())
+	for r in range(mini(ring_pts.size(), ring_open.size())):
+		var sid: int = ring_open[r]
+		if drive.stake_shown(sid) and absf(ring_pts[r].y - drive.stake_cap(sid).y) < 0.035:
+			capped_rings += 1
+	_check(capped_rings == ring_open.size() and capped_rings >= 2,
+		"the pair's pegs stand waiting before the first blow, a ring on each painted cap (%d of %d)"
+		% [capped_rings, ring_open.size()])
+	var heads: Array[Vector3] = rings.points().duplicate()
+	var same := 0
+	for i in range(heads.size()):
+		for j in range(i + 1, heads.size()):
+			if heads[i].distance_to(heads[j]) < 0.1:
+				same += 1
+	_check(same == 0, "each in its own place (%d pairs on top of each other)" % same)
+	# Close enough to feel the blow: the eye is within a few metres of the stake
+	# it is watching, where the whole-pad shot stood eight and a half off.
+	var mark := drive.stake_group_mark(drive.current_stake_group())
+	var stand := main.camera.global_position.distance_to(mark.global_position) if mark != null else 99.0
+	_check(stand < 4.5, "and the eye is right down on them (%.1f m)" % stand)
+	# The LAST of each group first, so the order inside a group is still the
+	# child's; the groups themselves come in the order the crew works them.
+	var seen: Array[Vector3] = []
+	var stakes := 0
+	while drive.stakes_in() < drive.stake_count() and stakes < 20:
+		if not await _until(func() -> bool: return runner.waiting_for_tap() and not runner.is_busy(),
+				"the next stake"):
+			break
+		var g := drive.current_stake_group()
+		var open := drive.open_stakes_in(g)
+		if open.is_empty():
+			break
+		var i: int = open[open.size() - 1]
+		var was := drive.stakes_in()
+		_check(_tap_ring(i), "stake %d's ring can be pressed" % i)
+		if stakes == 0:
+			# The blow KICKS the picture (the plan's 1.4), and it is still again
+			# well inside a second: measured off the camera, not the number.
+			var peak := 0.0
+			# And the sledge's face never goes INSIDE the cap it hits: it used to
+			# sink 25 cm into the proud peg before the strike (4.2). Measured only
+			# while the head is over this stake, not on its flight in.
+			var sledge_t := main.tool_node("sledge")
+			var sh := drive.stake_home(i)
+			var deepest := INF
+			var over := 0
+			while runner.is_busy():
+				peak = maxf(peak, maxf(absf(main.camera.h_offset), absf(main.camera.v_offset)))
+				if sledge_t != null:
+					var fp := sledge_t.global_position
+					if Vector2(fp.x - sh.x, fp.z - sh.z).length() < 0.02:
+						over += 1
+						deepest = minf(deepest, fp.y - (drive.stake_cap(i).y + Driveway.STAKE_CAP * 0.5))
+				await get_tree().process_frame
+			print("      sledge blow: camera peak offset %.1f mm" % (peak * 1000.0))
+			_check(peak >= 0.008, "the sledge blow kicks the picture (%.1f mm)" % (peak * 1000.0))
+			_check(over > 3 and deepest >= -0.005,
+				"and the sledge's face lands ON the cap, never inside the peg (%d frames over it, deepest %.3f m)"
+				% [over, deepest])
+			await get_tree().create_timer(0.6).timeout
+			_check(absf(main.camera.h_offset) < 0.0005 and absf(main.camera.v_offset) < 0.0005,
+				"and it is still again within 0.6 s")
+		elif was + 1 >= drive.stake_count():
+			# The last stake: the picture HOLDS on it before moving on (1.6).
+			await _until(func() -> bool: return drive.stake_is_in(i), "the last stake")
+			_check(main.rig.current_shot() == CameraRig.STAKE, "the last stake goes in with the eye still on it")
+			await get_tree().create_timer(0.5).timeout
+			_check(main.rig.current_shot() == CameraRig.STAKE,
+				"and the picture holds on it before moving on")
+		await _until(func() -> bool: return not runner.is_busy(), "stake %d" % i)
+		stakes += 1
+		if drive.stakes_in() != was + 1 or not drive.stake_is_in(i):
+			_check(false, "stake %d is the one that went in (%d -> %d)" % [i, was, drive.stakes_in()])
+		if drive.current_stake_group() != g and drive.stakes_in() < drive.stake_count():
+			await _settled()
+			seen.append(main.camera.global_position)
+	_check(drive.stakes_in() == 10, "all ten stakes are driven (%d)" % drive.stakes_in())
+	# And every one of them is left standing a stub above its board, so the
+	# picture has changed (round 3: ten stops that left nothing on screen).
+	var stub := drive.stake_home(1).y - Driveway.GRADE
+	_check(stub > 0.03, "each finishing a stub above the board, where the screed never goes (%.2f m)" % stub)
+	# The stub is the PINK cap: ten bright dots down the boards in every later
+	# wide, in a hue nothing beside them has (4.2).
+	# Read off the drawn cap itself - its box in the world and its own material -
+	# not the numbers it was built from.
+	var pink_stubs := 0
+	var cap_colour := Color.BLACK
+	for stake_n in drive.find_children("Stake_*", "MeshInstance3D", false, false):
+		var cap := stake_n.find_child("Cap", false, false) as MeshInstance3D
+		if cap == null or not cap.is_visible_in_tree():
+			continue
+		var box := cap.global_transform * cap.get_aabb()
+		if box.end.y > Driveway.GRADE + 0.03 and box.position.y < Driveway.GRADE + 0.01:
+			pink_stubs += 1
+		var cm := cap.get_active_material(0) as BaseMaterial3D
+		if cm != null:
+			cap_colour = cm.albedo_color
+	_check(pink_stubs == 10, "every driven stake's painted cap is the stub above its board (%d of 10)" % pink_stubs)
+	var board_m := (drive.find_child("Form_1", false, false) as MeshInstance3D).get_active_material(0) as BaseMaterial3D
+	var chair_m := (drive.find_child("Chair_1_1", false, false) as MeshInstance3D).get_active_material(0) as BaseMaterial3D
+	var gap_t := _hue_gap(cap_colour, board_m.albedo_color) if board_m != null else 0.0
+	var gap_c := _hue_gap(cap_colour, chair_m.albedo_color) if chair_m != null else 0.0
+	var gap_g := _hue_gap(cap_colour, SpotRings.GOLD)
+	_check(cap_colour.s > 0.5 and gap_t > 0.12 and gap_c > 0.12 and gap_g > 0.12,
+		"and the cap is a hue apart from the board, the chairs and the rings (%.2f / %.2f / %.2f of the wheel)"
+		% [gap_t, gap_c, gap_g])
+	var stood_still := 0
+	for i in range(1, seen.size()):
+		if seen[i].distance_to(seen[i - 1]) < 0.5:
+			stood_still += 1
+	_check(seen.size() >= 3 and stood_still == 0,
+		"and the eye stepped down the drive with them (%d pictures, %d the same place)"
+		% [seen.size(), stood_still])
+
+
+# --- Phase 5: the base ---------------------------------------------------------------------------
+
+func _phase_base() -> void:
+	print("--- 5. the base ---")
+	var waiting := await _until(func() -> bool: return runner.waiting_button() == "call", "the button")
+	_check(waiting, "the green button asks for the dump truck")
+	var skid_gone := main.machine("SkidSteer")
+	_check(skid_gone != null and not skid_gone.visible and not skid_gone.is_driving(),
+		"the skid steer is gone before the tipper is called")
+	hud.simulate_button("call")
+	var truck := main.machine("DumpTruck")
+	# A tap on the ARRIVING truck is answered by its horn; a tap on the lawn by
+	# nothing, and GO does not kick (the improvement plan's 1.8).
+	await _until(func() -> bool: return truck.visible \
+		and _on_screen(truck.global_position + Vector3(0.0, 1.0, 0.0)), "the truck in the picture")
+	await _frames(5)
+	var truck_px := main.camera.unproject_position(truck.global_position + Vector3(0.0, 1.0, 0.0))
+	main._press(truck_px, true)
+	main._press(truck_px, false)
+	_check(main.sfx.last_played == "horn", "a tap on the arriving truck honks it (%s)" % main.sfx.last_played)
+	# And winks its beacon, on top of the flashing it does while it drives: the
+	# wink was a silent no-op until 4.5 put the Beacon in the contract.
+	_check(truck.beacon_on() and truck.beacon_flash_k() > 0.5 and truck.beacon_level() > 0.9,
+		"and winks its beacon, which is turning as it comes (wink %.2f, lens %.2f)"
+		% [truck.beacon_flash_k(), truck.beacon_level()])
+	var lawn_px := main.camera.unproject_position(Vector3(Driveway.CENTRE_X - 6.0, 0.0, Driveway.Z_KERB - 2.0))
+	main._press(lawn_px, true)
+	main._press(lawn_px, false)
+	_check(main.sfx.last_played == "horn" and not hud.arrow_nudged(),
+		"and a tap on the lawn while it comes is answered by nothing")
+	# It BEEPS while it backs in, and stops with a hiss of its brakes (the
+	# plan's 3.5); the beeper is off once it has stopped.
+	await _until(func() -> bool: return main.sfx.is_looping("beeper") or not truck.is_driving(),
+		"the reverse leg")
+	_check(main.sfx.is_looping("beeper"), "the tipper beeps while it backs in")
+	await _until(func() -> bool: return truck.visible and not truck.is_driving(),
+		"the dump truck arrives")
+	_check(not main.sfx.is_looping("beeper") and main.sfx.last_played == "hiss",
+		"and stops with a hiss of the brakes, the beeper off (%s)" % main.sfx.last_played)
+	_check(not truck.beacon_on(), "and its beacon stops with it")
+	_check(truck.global_position.z < Driveway.Z_APRON + 4.0,
+		"it REVERSED up the drive, tail at the garage end (z %.2f)" % truck.global_position.z)
+	_check(absf(rad_to_deg(truck.rotation.y)) < 8.0,
+		"nose to the street, ready to pull out (%.0f deg)" % rad_to_deg(truck.rotation.y))
+	_check(absf(truck.global_position.y - drive.stand_y(truck.global_position)) < 0.06,
+		"and stands on the excavation rather than over it (y %.2f, ground %.2f)"
+			% [truck.global_position.y, drive.stand_y(truck.global_position)])
+	# Touch and hold, not a pad: "dump truck should be a touch and hold".
+	_check(not hud.pad_visible("up"), "the tip is press-and-hold, so no pad is up for it")
+	# And it turned up with something in it.
+	_check(truck.load_k() > 0.9, "the tipper arrived LOADED (%.2f)" % truck.load_k())
+	var from_z := truck.global_position.z
+	var rolled := truck.rolled_m()
+	runner.hold(true)
+	await _frames(5)
+	_check(truck.beacon_on(), "its beacon turns again while it tips")
+	var based := await _until(func() -> bool: return drive.gravel_k() >= 0.999, "the base laid")
+	runner.hold(false)
+	_check(based, "the bed tipped and the limestone went in (%.2f)" % drive.gravel_k())
+	_check(truck.global_position.z > from_z + 1.0,
+		"and it DROVE OUT as it dropped the rock (%.2f -> %.2f)" % [from_z, truck.global_position.z])
+	_check(absf(truck.rolled_m() - rolled) > 1.0,
+		"rolling as it went (%.1f m)" % absf(truck.rolled_m() - rolled))
+	_check(truck.load_k() < 0.05, "and emptied as it went (%.2f left)" % truck.load_k())
+	_check(absf(drive.gravel_top() - Driveway.BASE_TOP) < 0.01,
+		"to exactly the bottom of the slab (%.3f, want %.3f)" % [drive.gravel_top(), Driveway.BASE_TOP])
+	# The base is STONE, not one flat box of grey.
+	_check(drive.stones_down() > 200, "with loose stone lying all over it (%d)" % drive.stones_down())
+
+
+# --- Phase 5b: the steel ----------------------------------------------------------------------------
+
+func _phase_rebar() -> void:
+	print("--- 5b. the rebar ---")
+	var went := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "rebar_lay", "the rebar step")
+	_check(went, "the dump truck left and the steel is next")
+	_check(runner.current_step().shot == "BARS", "the rebar has its own shot")
+	_check(runner.waiting_for_tap(), "and one tap is one bar")
+	_check(drive.chairs_shown(), "the chairs are down first, all of them")
+	# The four long bars first, all four ringed, any order.
+	_check(rings.count() == 4, "four rings, one on each long bar's place (%d)" % rings.count())
+	await _settled()
+	_check(_all_rings_on_screen(), "and every one of them is inside the frame")
+	# From the LOW eye every WAITING long bar is still seen against the base,
+	# inside the forms - at its ring and a stride nearer the eye (the session-4
+	# verification pass: at a 6 cm lift, fanned outward, the outer two lay along
+	# the form boards' tops in this picture). Where the eye's ray through the bar
+	# meets the base.
+	var inside_worst := INF
+	var cam_p := main.camera.global_position
+	for bi in range(1, 5):
+		var bar_node := drive.find_child("Bar_%d" % bi, false, false) as Node3D
+		if bar_node == null:
+			inside_worst = -1.0
+			continue
+		for p: Vector3 in [drive.bar_wait_point(bi), bar_node.to_global(Vector3(0.0, 0.0, 1.7))]:
+			var tr := (Driveway.BASE_TOP - cam_p.y) / minf(p.y - cam_p.y, -0.001)
+			var hit_x := cam_p.x + (p.x - cam_p.x) * tr
+			var margin := minf(hit_x - (Driveway.CENTRE_X - Driveway.WIDTH * 0.5),
+				(Driveway.CENTRE_X + Driveway.WIDTH * 0.5) - hit_x)
+			inside_worst = minf(inside_worst, margin)
+	_check(inside_worst >= 0.05,
+		"from the long bars' low eye every waiting bar is seen against the base, inside the forms (%.2f m to spare)"
+		% inside_worst)
+	for i in [3, 1, 4, 2]:
+		_check(_tap_ring(i), "bar %d's ring can be pressed (out of order)" % i)
+		if i == 3:
+			# The landing is an event (4.7): the bar FALLS, clangs and bounces
+			# twice on its chairs before it rests, and it leaves the chairs slower
+			# than it hit them - one gravity. Watched every frame, wall-clock.
+			var bar3 := drive.find_child("Bar_3", false, false) as Node3D
+			var land := drive.bar_landing(3)
+			var h1: float = land["h1"]
+			var h2: float = land["h2"]
+			var hop_hi := 0.0
+			var rises := 0
+			var was_up := false
+			var samples: Array[Vector2] = []
+			var contact_us := -1
+			while runner.is_busy():
+				if bar3 != null:
+					var dy := bar3.position.y - drive.bar_home(3).y
+					var now_us := Time.get_ticks_usec()
+					samples.append(Vector2(float(now_us) / 1e6, dy))
+					if drive.bar_is_in(3):
+						if contact_us < 0:
+							contact_us = now_us
+						hop_hi = maxf(hop_hi, dy)
+						if dy > h2 * 0.5 and not was_up:
+							rises += 1
+						was_up = dy > h2 * 0.5
+				await get_tree().process_frame
+			var rest_dy := (bar3.position.y - drive.bar_home(3).y) if bar3 != null else 1.0
+			# The speed over the 30 ms either side of contact.
+			var impact := _speed_over(samples, float(contact_us) / 1e6 - 0.03, float(contact_us) / 1e6)
+			var takeoff := _speed_over(samples, float(contact_us) / 1e6, float(contact_us) / 1e6 + 0.03)
+			_check(rises == 2 and hop_hi > h1 * 0.7 and hop_hi < h1 * 1.2 and absf(rest_dy) < 0.0005,
+				"a long bar lands with two bounces on its chairs and comes to rest (%d hops, %.1f cm high of %.1f, %.1f mm off)"
+				% [rises, hop_hi * 100.0, h1 * 100.0, rest_dy * 1000.0])
+			_check(impact < -0.05 and takeoff > 0.0 and takeoff <= -impact,
+				"and it leaves the chairs slower than it hit them (down %.2f m/s, up %.2f m/s)" % [-impact, takeoff])
+		await _until(func() -> bool: return not runner.is_busy(), "bar %d lands" % i)
+		_check(drive.bar_is_in(i), "and bar %d is the one that went down" % i)
+		if i == 4:
+			# Three long bars on their chairs, the eye still low on them: a chair
+			# stands on a LEG, not a flat orange square, with daylight under the
+			# laid bar (4.6) - bar 3's chair under the fifth cross bar's place.
+			var ch := drive.find_child("Chair_3_5", false, false) as Node3D
+			var post := 0.0
+			var foot := 0.0
+			var under := 0.0
+			var fr_b := main.camera.get_viewport().get_visible_rect().size
+			if ch != null:
+				var cp := ch.global_position
+				post = _px_rows(cp + Vector3(0.0, Driveway.CHAIR_H * 0.5 - 0.008, 0.0),
+					cp + Vector3(0.0, -Driveway.CHAIR_H * 0.5 + 0.008, 0.0))
+				foot = _px_rows(cp + Vector3(0.0, -Driveway.CHAIR_H * 0.5 + 0.008, 0.055),
+					cp + Vector3(0.0, -Driveway.CHAIR_H * 0.5 + 0.008, -0.055))
+				var bar3n := drive.find_child("Bar_3", false, false) as Node3D
+				var under_at := Vector3(drive.bar_home(3).x, bar3n.global_position.y - Driveway.BAR_T * 0.5, cp.z)
+				under = _px_rows(under_at, Vector3(under_at.x, Driveway.BASE_TOP, under_at.z))
+			# In thousandths of the frame's height, so a 4:3 run measures the same.
+			var post_k := post * 1000.0 / fr_b.y
+			var under_k := under * 1000.0 / fr_b.y
+			_check(ch != null and _on_screen(ch.global_position) and main.rig.current_shot() == CameraRig.BARS \
+				and drive.current_bar_group() == 0 and post_k >= 12.0 and post >= 0.6 * foot and under_k >= 16.0,
+				"from the long bars' low eye a laid bar's chair stands on a leg, daylight under the bar (post %.1f px, foot %.1f px, gap %.1f px)"
+				% [post, foot, under])
+	_check(drive.bars_in() == 4, "the four long bars are on their chairs (%d)" % drive.bars_in())
+	# A bar on its chairs sits UP off the base - in the middle of the slab, not on
+	# the ground. That is the lesson of the phase.
+	var lift := drive.bar_home(1).y - Driveway.BASE_TOP
+	_check(lift > 0.02 and lift < (Driveway.GRADE - Driveway.BASE_TOP) * 0.8,
+		"and a long bar sits up off the base, inside the slab (%.3f m up)" % lift)
+	# Then the cross bars in PAIRS, the eye stepping down the drive.
+	var seen: Array[Vector3] = []
+	var laid := 0
+	while drive.bars_in() < 12 and laid < 20:
+		if not await _until(func() -> bool: return runner.waiting_for_tap() and not runner.is_busy(),
+				"the next bar"):
+			break
+		var g := drive.current_bar_group()
+		var open := drive.open_bars_in(g)
+		if open.is_empty():
+			break
+		_check(rings.count() == open.size(), "a ring on each bar of the pair (%d of %d)" % [rings.count(), open.size()])
+		var i: int = open[open.size() - 1]
+		_check(_tap_ring(i), "bar %d's ring can be pressed" % i)
+		if laid == 0:
+			# The first cross bar (4.7): clang at contact, its ties NOT yet on;
+			# then, once it has bounced and settled, the four ties pop on one
+			# after another down the bar, near end first, each with a click.
+			var bar_n := drive.find_child("Bar_%d" % i, false, false) as Node3D
+			var contact_ms := -1
+			var ties_at_contact := 0
+			var clang := false
+			var last_hop_ms := -1
+			var mine := drive.bar_ties(i)
+			var popped_ms: Array[int] = []
+			for t in mine:
+				popped_ms.append(-1)
+			var clicks0 := int(main.sfx.played_count.get("click", 0))
+			while runner.is_busy():
+				var now := Time.get_ticks_msec()
+				# The clang within a frame or two of contact (`_ease` reports its
+				# k = 1 one frame before it returns to the verb).
+				if contact_ms >= 0 and not clang and main.sfx.last_played == "rebardrop" \
+						and now - contact_ms <= 60:
+					clang = true
+				if drive.bar_is_in(i) and contact_ms < 0:
+					contact_ms = now
+					clang = main.sfx.last_played == "rebardrop"
+					for t in drive.bar_ties(i):
+						if t.visible and t.scale.x > 0.5:
+							ties_at_contact += 1
+					mine = drive.bar_ties(i)
+					popped_ms.resize(mine.size())
+					popped_ms.fill(-1)
+				if contact_ms >= 0 and bar_n != null and bar_n.position.y - drive.bar_home(i).y > 0.004:
+					last_hop_ms = now
+				for k in range(mine.size()):
+					if popped_ms[k] < 0 and mine[k].visible and mine[k].scale.x > 0.5:
+						popped_ms[k] = now
+				await get_tree().process_frame
+			var in_turn := mine.size() == 4
+			var gaps_ok := true
+			for k in range(mine.size()):
+				if popped_ms[k] < 0 or popped_ms[k] < last_hop_ms:
+					in_turn = false
+				if k > 0 and popped_ms[k] >= 0 and popped_ms[k - 1] >= 0:
+					var gap := popped_ms[k] - popped_ms[k - 1]
+					if gap < 20 or gap > 140:
+						gaps_ok = false
+					if (mine[k] as Node3D).global_position.x <= (mine[k - 1] as Node3D).global_position.x:
+						in_turn = false
+			_check(clang and ties_at_contact == 0,
+				"a cross bar clangs on contact with its ties still to come (%d on at contact)" % ties_at_contact)
+			var clicks := int(main.sfx.played_count.get("click", 0)) - clicks0
+			_check(in_turn and gaps_ok and clicks == mine.size(),
+				"then, settled, its four ties pop on in turn down the bar, each with a click (%s ms after contact, %d clicks)"
+				% [str(popped_ms.map(func(v: int) -> int: return v - contact_ms)), clicks])
+		await _until(func() -> bool: return not runner.is_busy(), "bar %d" % i)
+		laid += 1
+		if drive.current_bar_group() != g and drive.bars_in() < 12:
+			await _settled()
+			seen.append(main.camera.global_position)
+	_check(drive.bars_in() == 12, "all twelve bars are down (%d)" % drive.bars_in())
+	_check(drive.rebar_done(), "and the driveway calls its steel done")
+	var stood := 0
+	for i in range(1, seen.size()):
+		if seen[i].distance_to(seen[i - 1]) < 0.4:
+			stood += 1
+	_check(seen.size() >= 3 and stood == 0,
+		"the eye stepped down the drive with the pairs (%d pictures, %d the same place)" % [seen.size(), stood])
+	# Tied where they cross: a tie is visible at every crossing once its cross bar is down.
+	var ties := 0
+	for n in drive.find_children("Tie_*", "MeshInstance3D", false, false):
+		if (n as Node3D).visible and (n as Node3D).scale.is_equal_approx(Vector3.ONE):
+			ties += 1
+	_check(ties == 32, "and tied at every crossing, every tie whole (%d of 32)" % ties)
+
+
+# --- Phase 6: the pour ----------------------------------------------------------------------------
+
+func _phase_pour() -> void:
+	print("--- 6. the pour ---")
+	var waiting := await _until(func() -> bool: return runner.waiting_button() == "call", "the button")
+	_check(waiting, "the green button asks for the mixer")
+	var tipper_gone := main.machine("DumpTruck")
+	_check(tipper_gone != null and not tipper_gone.visible and not tipper_gone.is_driving(),
+		"the tipper is gone before the mixer is called")
+	_check(drive.chunks_left() == 0 and not main.sfx.is_looping("leave"),
+		"the heap went with it and its idle stopped (%d chunks shown)" % drive.chunks_left())
+	hud.simulate_button("call")
+	# The mixer beeps as it backs to the kerb too.
+	var mixer_in := main.machine("ConcreteTruck")
+	await _until(func() -> bool: return main.sfx.is_looping("beeper") or (mixer_in.visible and not mixer_in.is_driving()),
+		"the mixer's reverse leg")
+	_check(main.sfx.is_looping("beeper"), "the mixer beeps while it backs to the kerb")
+	await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "pour_chute", "the pour beat")
+	var mixer := main.machine("ConcreteTruck")
+	# The truck stays drawn while the eye flies down to the chute and goes only
+	# once it has arrived (the improvement plan's 0.6): a truck that blinked out
+	# of the wide picture left its chute hanging in the air, a teleport in front
+	# of the child.
+	_check(main.rig.is_moving(), "the eye is still on its way down to the chute")
+	_check(_drawn(mixer, "Drum") > 0, "and the truck is drawn until it gets there")
+	_check(mixer.visible, "the mixer is on site")
+	# ON THE ROAD, tail to the drive, and its rearmost tyre past the kerb: the
+	# steel is down and no wheel goes over it (DESIGN 2a).
+	_check(absf(rad_to_deg(mixer.rotation.y)) < 8.0,
+		"nose to the far kerb, tail to the drive (%.0f deg)" % rad_to_deg(mixer.rotation.y))
+	var tyre := mixer.global_position.z - mixer.rear_overhang()
+	_check(tyre > SiteMain.KERB_Z - 0.02,
+		"standing on the ROAD with its rear tyre past the kerb, never on the steel (tyre z %.2f, kerb %.2f)"
+			% [tyre, SiteMain.KERB_Z])
+	# And watched for the whole pour and the whole rake: no wheel on the pad.
+	_on_pad_frames[0] = 0
+	_watch_pad = true
+	_watch_wheels(mixer)
+	for key: String in ["up", "down", "left", "right"]:
+		_check(hud.pad_visible(key), "the %s pad is up for the chute" % key)
+	await _settled()
+	# The user's visual trick: the truck is out of the way and the chute is not.
+	_check(_drawn(mixer, "Drum") == 0, "the truck itself is not drawn during the pour")
+	_check(_drawn(mixer, "Chute") > 0, "but the chute the child is steering is")
+	# Nor its beacon, nor the light that hangs under it (4.5): an amber glow over
+	# the chute with no truck would be a light from nowhere.
+	var beacon_n := mixer.node_for("Beacon")
+	var beacon_l := beacon_n.get_node_or_null("BeaconLight") as Node3D if beacon_n != null else null
+	_check(beacon_n != null and beacon_l != null and not beacon_n.is_visible_in_tree() and not beacon_l.is_visible_in_tree(),
+		"and neither is the mixer's beacon or its light")
+	var view := main.get_node_or_null("PourView") as Node3D
+	_check(view != null, "and the camera hangs off the pour, not off the chute")
+	# Right up by the BACK of the chute, on the truck's side of it: the truck has
+	# to be behind the camera, or the child can see that it is missing.
+	var spout := mixer.spout_world()
+	var eye := main.camera.global_position
+	_check(eye.z > spout.z + 0.8,
+		"the camera is behind the chute head (eye z %.2f, spout z %.2f)" % [eye.z, spout.z])
+	var head := mixer.node_for("Chute")
+	var gap := eye.distance_to(head.global_position) if head != null else 99.0
+	# Within about two chute-lengths of its head. The number is a floor, not a
+	# composition: it is what stops this drifting back out to the nine metres it
+	# was watched from before, where the whole truck was in shot.
+	_check(gap < 3.4, "right up at the chute's own head (%.2f m from it)" % gap)
+	_check(_on_screen(spout), "with the spout itself in the picture")
+	# Nothing of the truck is DRAWN, so nothing of it can be in shot - which is
+	# the whole trick, and it is asserted above by the mesh counts.
+	# Swinging the chute must not drag the camera sideways or shunt it along the
+	# drive: the pads have to mean what they say.
+	# The idle hint (round 7: it has to be INSIDE the picture; round 12: only on
+	# a cell that LOOKS short, under half). Checked NOW, while the band is still
+	# nearly empty: with the chute parked the whole band is over half within four
+	# seconds of pouring, and after that the rule rightly shows nothing - which
+	# is where this check used to stand, passing only when the frames happened
+	# to run at the right speed. The delay is shortened for the test the way the
+	# white arrow's is above; the beat reads it every frame.
+	var pointer := main.get_node_or_null("Pointer") as SpotRings
+	var hint_delay_was: float = main.config.chute_hint_delay
+	main.config.chute_hint_delay = 0.8
+	await get_tree().create_timer(1.3).timeout
+	await _frames(3)
+	_check(_hint_on_screen(), "after a pause the pour's hint stands on a short cell, inside the frame")
+	main.config.chute_hint_delay = hint_delay_was
+	# And the white MIME stands on the PAD that would take the pour there,
+	# miming a hold (the plan's 2.1): the one beat that had no teacher.
+	var mime_delay_was: float = hud.hint_delay
+	hud.hint_delay = 0.3
+	await get_tree().create_timer(0.7).timeout
+	var pad_key: String = main._pour_hint_pad()
+	var prect := hud.pad_rect(pad_key)
+	_check(hud.hint_visible() and hud.hint_kind() == SiteHud.Hint.HOLD,
+		"the white mime is up over a pad, miming a hold (%s)" % pad_key)
+	_check(prect.has_area() and hud.hint_position().distance_to(prect.get_center()) < prect.size.x * 1.2,
+		"on the %s pad, the one that takes the pour toward the emptiest cell" % pad_key)
+	hud.hint_delay = mime_delay_was
+	# A tap on the picture during the pour is answered by that pad kicking.
+	var slab_px := main.camera.unproject_position(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_KERB - 2.0))
+	main._press(slab_px, true)
+	main._press(slab_px, false)
+	var pad_ctl: Control = hud._pads.get(pad_key)
+	_check(main.sfx.last_played == "pop" and pad_ctl != null and pad_ctl.scale.x > 1.05,
+		"and a tap on the picture is heard and kicks that pad")
+	var was_view := view.position.z
+	hud.press_pad("left", true)
+	await _frames(10)
+	_check(pointer != null and not pointer.lit(), "and a pad press takes it away")
+	_check(not hud.hint_visible(), "the white mime too")
+	await _frames(80)
+	hud.press_pad("left", false)
+	await _frames(20)
+	_check(absf(view.position.z - was_view) < 0.25,
+		"swinging the chute leaves the camera where it is (%.2f -> %.2f)"
+			% [was_view, view.position.z])
+	await _frames(90)
+	_check(drive.fill_fraction() > 0.0, "concrete is going in (%.3f)" % drive.fill_fraction())
+	# The control the user asked for: forward and backwards up the drive.
+	var start_z := mixer.global_position.z
+	var view_z := view.position.z if view != null else 0.0
+	hud.press_pad("up", true)
+	await _frames(200)
+	hud.press_pad("up", false)
+	var out_z := mixer.global_position.z
+	# UP means UP the picture (the plan's 2.1): the truck creeps back toward
+	# the kerb and the pour goes up the drive, toward the garage.
+	_check(out_z < start_z - 0.2,
+		"the UP pad takes the pour UP the drive, toward the garage (%.2f -> %.2f)" % [start_z, out_z])
+	_check(view != null and view.position.z < view_z - 0.15,
+		"and the camera walked up with it (%.2f -> %.2f)" % [view_z, view.position.z if view != null else 0.0])
+	hud.press_pad("down", true)
+	await _frames(200)
+	hud.press_pad("down", false)
+	_check(mixer.global_position.z > out_z + 0.2,
+		"and DOWN brings it back toward the kerb (%.2f -> %.2f)" % [out_z, mixer.global_position.z])
+	# Now fill the kerb end the way a competent pair would: look at where the
+	# band the chute can reach is emptiest, swing the chute toward it and creep the
+	# truck so the spout is over it. A blind sweep was not a test of anything - it
+	# wasted most of the load on the grass past the kerb and then reported the
+	# mechanic broken.
+	var reach := mixer.global_position.z - mixer.pour_point_world(Driveway.GRADE).z
+	var band_from := main.mixer_stand_z() - reach - 0.35
+	var swept := 0
+	while drive.band_fraction(band_from) < main.config.band_done and swept < 420:
+		var want: Vector3 = drive.emptiest_in_band(band_from)
+		var dx := want.x - Driveway.CENTRE_X
+		var dz := want.z - mixer.pour_point_world(Driveway.GRADE).z
+		if dx < -0.25:
+			hud.press_pad("left", true)
+		elif dx > 0.25:
+			hud.press_pad("right", true)
+		if dz > 0.35:
+			hud.press_pad("down", true)
+		elif dz < -0.35:
+			hud.press_pad("up", true)
+		await _frames(24)
+		for key: String in ["up", "down", "left", "right"]:
+			hud.press_pad(key, false)
+		swept += 1
+	var filled := drive.band_fraction(band_from) >= main.config.band_done
+	_check(filled, "the kerb end of the form filled (%.3f after %d sweeps)" % [drive.band_fraction(band_from), swept])
+	if not filled:
+		# WHICH cells are dry, not just that some are.
+		print(drive.fill_report())
+	_check(drive.fill_fraction() < 0.75,
+		"and the rest of the form is still waiting for the rake (%.2f of it full)" % drive.fill_fraction())
+	await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb != "pour_chute", "the pour ends")
+	_check(runner.current_step() != null and runner.current_step().verb == "rake_pull",
+		"and the come-along is next")
+
+
+# --- Phase 6b: the come-along ------------------------------------------------------------------------
+
+func _phase_rake() -> void:
+	print("--- 6b. the come-along ---")
+	var mixer := main.machine("ConcreteTruck")
+	_check(runner.current_step().shot == "PULL", "the rake has its own shot, from the garage door")
+	_check(runner.waiting_for_hold(), "and it is dragged")
+	await _settled()
+	_check(_drawn(mixer, "Drum") == 0, "the truck is still not drawn")
+	_check(main.camera.global_position.z < Driveway.Z_APRON + 0.5,
+		"the eye stands at the garage end looking down the drive (z %.2f)" % main.camera.global_position.z)
+	var apron_before := drive.cell_fill(2, 0)
+	_check(apron_before < 0.02, "nothing has reached the apron end yet (%.3f)" % apron_before)
+	# Dragging at the FAR end draws on the chute's heap at the kerb, from
+	# anywhere (the user's third playtest: "it was hard to tell where I was
+	# supposed to spread it"): the sandy apron cell goes grey under the finger.
+	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.4))
+	runner.hold(true)
+	await _frames(60)
+	_check(drive.cell_fill(2, 0) > 0.01,
+		"raking at the apron draws concrete up from the heap at the kerb (%.3f)" % drive.cell_fill(2, 0))
+	# The finger up and still: the hint has to be inside this shot too.
+	runner.hold(false)
+	main.clear_work_cursor()
+	await get_tree().create_timer(main.config.chute_hint_delay + 0.6).timeout
+	await _settled()
+	_check(_hint_on_screen(), "and after a pause the come-along's hint is inside the frame")
+	# A competent child: keep the rake at the FRONT of the concrete and it comes
+	# up the form a stroke at a time, as fast as the chute supplies it.
+	var reach: int = main.config.rake_reach
+	var pulled := false
+	var pull_started := Time.get_ticks_msec()
+	for frame in range(FRAME_CAP):
+		var front := drive.rake_front_world(reach)
+		main.set_work_cursor(Vector3(front.x, Driveway.GRADE, front.z - 0.2))
+		runner.hold(true)
+		await get_tree().process_frame
+		if drive.fill_fraction() >= main.config.pour_done:
+			pulled = true
+			break
+	_check(pulled, "pulling from the front fills the whole form (%.3f)" % drive.fill_fraction())
+	if not pulled:
+		print(drive.fill_report())
+	# The finger is the only bottleneck (the plan's 2.4): the truck supplies
+	# faster than the rake draws, so a competent pull is seconds, not a trickle.
+	var pull_s := float(Time.get_ticks_msec() - pull_started) / 1000.0
+	_check(pull_s < 25.0, "and it never waited on the truck (%.1f s of pulling)" % pull_s)
+	_check(drive.cell_fill(2, 0) > (Driveway.GRADE - Driveway.BASE_TOP) * 0.9,
+		"including the apron end (%.3f)" % drive.cell_fill(2, 0))
+	runner.hold(false)
+	main.clear_work_cursor()
+	await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb != "rake_pull", "the rake ends")
+	_watch_pad = false
+	_check(_on_pad_frames[0] == 0,
+		"and the mixer never put a wheel on the pad (%d frames)" % _on_pad_frames[0])
+	# It comes back FADED IN over the eye's ease out to the wide (the improvement
+	# plan's 0.6): drawn from the first frame of the leave but see-through until
+	# the eye has arrived, never popped in whole.
+	_check(main.rig.is_moving() and _drawn(mixer, "Drum") > 0 and _alpha_of(mixer, "Drum") < 0.5,
+		"the truck fades in while the eye eases out to the wide (alpha %.2f)" % _alpha_of(mixer, "Drum"))
+	await _settled()
+	await _frames(4)
+	_check(_drawn(mixer, "Drum") > 0 and _alpha_of(mixer, "Drum") > 0.99,
+		"and is whole again once it has arrived, before it leaves (alpha %.2f)" % _alpha_of(mixer, "Drum"))
+
+
+# --- Phases 7 to 10: the finishing -----------------------------------------------------------------
+
+func _phase_finishing() -> void:
+	print("--- 7-10. the finishing ---")
+	var wet := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "spray_water", "the water")
+	_check(wet, "the mixer left and the hose is next")
+	var mixer_out := main.machine("ConcreteTruck")
+	_check(mixer_out != null and mixer_out.visible and mixer_out.is_driving(),
+		"with the mixer still leaving in the background (3.2)")
+	# It must do NOTHING where the finger has not been. That is the whole of the
+	# user's ninth note: "get it all wet them selves, not just a basic click".
+	_check(drive.water_coverage() < 0.01, "the slab starts dry everywhere (%.2f)" % drive.water_coverage())
+	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.5))
+	runner.hold(true)
+	await _frames(60)
+	var corner := drive.water_coverage()
+	_check(corner > 0.01 and corner < 0.30,
+		"holding in one corner wets that corner and no more (%.2f)" % corner)
+	# The hose has a HOSE (the improvement plan's 4.3): off the nozzle's own
+	# stub, off the bottom of the picture, never across the water on screen - at
+	# the far aim, and the near-right one where the bare stub used to show.
+	await _settled()
+	var hose_t := main.tool_node("hose")
+	var fr_h := main.camera.get_viewport().get_visible_rect().size
+	var joined := 0
+	var off_bottom := 0
+	var crossings := 0
+	var aims: Array[Vector3] = [Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.5),
+		Vector3(4.1, Driveway.GRADE, 4.3), Vector3(1.0, Driveway.GRADE, 4.1)]
+	# `STUB_END` is where the nozzle's OWN model ends its hose stub: the GLB's
+	# Body mesh has the stub's end ring there (read off the mesh, not the const).
+	var stub_ring := 0
+	var body := hose_t.find_child("Body", true, false) as MeshInstance3D if hose_t != null else null
+	var model := hose_t.find_child("Model", false, false) as Node3D if hose_t != null else null
+	if body != null and model != null and body.mesh != null:
+		var to_model := model.global_transform.affine_inverse() * body.global_transform
+		for s in range(body.mesh.get_surface_count()):
+			var verts: PackedVector3Array = body.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
+			for v in verts:
+				if (to_model * v).distance_to(HandTool.STUB_END) < HandTool.TRAIL_R * 1.5:
+					stub_ring += 1
+	_check(stub_ring >= 6, "the nozzle's model ends its hose stub where the hose leaves from (%d vertices on that ring)" % stub_ring)
+	for aim in aims:
+		main.set_work_cursor(aim)
+		await _frames(3)
+		if hose_t == null or not hose_t.trail_visible():
+			continue
+		var pts := hose_t.trail_points()
+		if pts.size() >= 2 and pts[0].distance_to(hose_t.stub_world()) < 0.01:
+			joined += 1
+		var last := pts[pts.size() - 1]
+		if not main.camera.is_position_behind(last) and main.camera.unproject_position(last).y > fr_h.y + 8.0:
+			off_bottom += 1
+		crossings += _screen_crossings(pts, hose_t.jet_points())
+	_check(joined == aims.size(), "the hose runs from the nozzle's own stub at every aim (%d of %d)" % [joined, aims.size()])
+	_check(off_bottom == aims.size(), "and off the bottom of the picture (%d of %d)" % [off_bottom, aims.size()])
+	_check(crossings == 0, "and never across the water on screen (%d crossings)" % crossings)
+	# ONE finger owns the beat (the improvement plan's 0.3): a second finger
+	# landing and lifting - a palm, a thumb holding the iPad - must neither take
+	# the hose nor end the hold. Through the real input pipeline, with touch
+	# INDICES, because which finger it was is decided before `_press` ever runs.
+	runner.hold(false)
+	main.clear_work_cursor()
+	await _frames(2)
+	var slab_at := Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 2.5)
+	var slab_px := main.camera.unproject_position(slab_at)
+	var lawn_px := main.camera.unproject_position(Vector3(Driveway.CENTRE_X - 4.0, 0.0, Driveway.Z_KERB - 1.0))
+	_touch(0, slab_px, true)
+	await _frames(3)
+	_check(runner.held, "a real finger (index 0) on the slab holds the hose")
+	var wet0 := drive.water_coverage()
+	_touch(1, lawn_px, true)
+	await _frames(2)
+	_touch(1, lawn_px, false)
+	await _frames(3)
+	_check(runner.held, "a second finger landing and lifting does not end the hold")
+	var under := main.work_point(Driveway.GRADE)
+	_check(under != Vector3.INF and under.distance_to(slab_at) < 0.6,
+		"and the hose is still under the first finger (%s)" % str(under))
+	for i in range(1, 11):
+		_drag(0, main.camera.unproject_position(slab_at + Vector3(0.0, 0.0, 0.35 * float(i))))
+		await _frames(8)
+	_check(drive.water_coverage() > wet0 + 0.01,
+		"and dragging that finger wets more of the slab (%.3f -> %.3f)" % [wet0, drive.water_coverage()])
+	_touch(0, slab_px, false)
+	await _frames(2)
+	_check(not runner.held, "and the hose stops when the finger that held it lifts")
+	var all_wet := await _sweep(func() -> float: return drive.water_coverage())
+	_check(all_wet, "sweeping the whole slab wets all of it (%.2f)" % drive.water_coverage())
+	# Through the finished beat's HOLD the hose stays in the hands, hose and all:
+	# flying the nozzle home dropped its hose in one frame in a still picture,
+	# which a 4:3 iPad shows (the session-4 verification pass).
+	var hold_frames := 0
+	var hose_dropped := 0
+	while runner.current_step() != null and runner.current_step().verb == "spray_water" and hold_frames < 3000:
+		if hose_t != null and hose_t.visible and not hose_t.trail_visible():
+			hose_dropped += 1
+		hold_frames += 1
+		await get_tree().process_frame
+	_check(hose_dropped == 0 and hold_frames > 1,
+		"the hose stays in the hands through the finished beat's hold (%d frames, %d without its hose)"
+		% [hold_frames, hose_dropped])
+	var screed := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "screed_pull", "the screed")
+	_check(screed, "and the beat ended when it was covered")
+	var hose_after := main.tool_node("hose")
+	_check(hose_after != null and not hose_after.is_visible_in_tree(), "and the nozzle and its hose are put away with the next beat")
+	_check(not drive.is_flat(), "the poured slab is NOT flat before the screed")
+	# The board is DRAGGED down the drive (fourth playtest): a finger held still
+	# does nothing, a finger walked from the apron to the kerb strikes it off.
+	# A finger resting three metres down the slab has no hold of the board.
+	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 3.0))
+	runner.hold(true)
+	await _frames(40)
+	_check(drive.struck_fraction() < 0.02,
+		"a finger resting ahead of the board does not move it (%.2f struck)" % drive.struck_fraction())
+	runner.hold(false)
+	await _frames(2)
+	# A fast flick does not strike the slab in a frame: the board is grabbed at
+	# the press and WALKS after the finger (the plan's 2.5).
+	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.2))
+	runner.hold(true)
+	await _frames(3)
+	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_KERB + 0.4))
+	await _frames(2)
+	_check(drive.struck_fraction() < 0.08,
+		"a finger flicked to the kerb leaves the board walking behind it (%.2f struck)" % drive.struck_fraction())
+	runner.hold(false)
+	await _frames(2)
+	var dragged := await _drag_along(
+		Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.2),
+		Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_KERB + 0.4),
+		func() -> bool: return runner.current_step() != null \
+			and runner.current_step().verb == "joint_cut")
+	_check(dragged, "dragging the board to the kerb strikes the slab off and ends the beat")
+	_check(drive.is_flat(), "the screed struck it off level")
+	# A joint runs right across the drive, and the camera has to hold both ends.
+	_check(runner.current_step().shot == "JOINT", "the joints have their own shot")
+	# The groover's sled carries a saturated tool colour at dark steel's value,
+	# with the steel under it (the improvement plan's 4.4): a dark-grey sled on a
+	# grey slab was the least visible tool in the game. Read off the live tool.
+	var jt := main.tool_node("jointer")
+	var blade := (jt.find_child("Blade", true, false) as MeshInstance3D) if jt != null else null
+	var paint := Color.BLACK
+	var paint_w := 0.0
+	var steel_w := 0.0
+	if blade != null and blade.mesh != null:
+		for s in range(blade.mesh.get_surface_count()):
+			var bmat := blade.get_active_material(s) as BaseMaterial3D
+			if bmat == null:
+				continue
+			# How wide the surface is across the sled: the steel RIM is the one
+			# dark surface wider than the orange plate (the bead and the trailing
+			# bit are 2 cm, and a dark bit alone once passed this check).
+			var verts: PackedVector3Array = blade.mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX]
+			var xmin := INF
+			var xmax := -INF
+			for v in verts:
+				xmin = minf(xmin, v.x)
+				xmax = maxf(xmax, v.x)
+			var c := bmat.albedo_color
+			if c.s > paint.s:
+				paint = c
+				paint_w = xmax - xmin
+			if c.s < 0.25 and c.get_luminance() < 0.40:
+				steel_w = maxf(steel_w, xmax - xmin)
+	var rim := paint_w > 0.0 and steel_w > paint_w
+	var orange := paint.h > 0.03 and paint.h < 0.12
+	print("      groover sled: %s (h %.3f, s %.2f, luma %.2f), %.3f m wide; steel %.3f m wide"
+		% [str(paint), paint.h, paint.s, paint.get_luminance(), paint_w, steel_w])
+	_check(paint.s > 0.8 and orange and paint.get_luminance() > 0.20 and paint.get_luminance() < 0.42 and rim,
+		"the groover's sled wears tool orange at dark steel's value, a steel rim proud of it (h %.3f, luma %.2f, rim %.3f > %.3f m)"
+		% [paint.h, paint.get_luminance(), steel_w, paint_w])
+	await _settled()
+	var seen := _both_ends_visible(drive.joint_z(1))
+	_check(seen, "which holds the whole width of the line (%s)" % ("yes" if seen else "no"))
+	# Each joint is PULLED across, near form to far form - and a finger held
+	# still at the far form cuts nothing (the hold is lifted between joints).
+	for jn in [1, 2]:
+		runner.hold(false)
+		main.set_work_cursor(Vector3(Driveway.CENTRE_X + Driveway.WIDTH * 0.5 - 0.2, Driveway.GRADE, drive.joint_z(jn)))
+		runner.hold(true)
+		await _frames(40)
+		_check(drive.joint_k(jn) < 0.02, "a finger resting at the far form does not cut joint %d (%.2f)" % [jn, drive.joint_k(jn)])
+		runner.hold(false)
+		await _frames(2)
+		if jn == 2:
+			# Grabbed at the press, the sled follows a finger that wanders off
+			# the line mid-pull (the plan's 2.5).
+			var x0 := Driveway.CENTRE_X - Driveway.WIDTH * 0.5
+			main.set_work_cursor(Vector3(x0 + 0.15, Driveway.GRADE, drive.joint_z(jn)))
+			runner.hold(true)
+			await _frames(3)
+			main.set_work_cursor(Vector3(x0 + 1.6, Driveway.GRADE, drive.joint_z(jn) + 1.2))
+			await _frames(40)
+			_check(drive.joint_k(jn) > 0.05,
+				"a finger that wanders off the line after the grab still pulls the sled (%.2f)" % drive.joint_k(jn))
+			runner.hold(false)
+			await _frames(2)
+		var pulled := await _drag_along(
+			Vector3(Driveway.CENTRE_X - Driveway.WIDTH * 0.5 - 0.1, Driveway.GRADE, drive.joint_z(jn)),
+			Vector3(Driveway.CENTRE_X + Driveway.WIDTH * 0.5 + 0.3, Driveway.GRADE, drive.joint_z(jn)),
+			func() -> bool: return drive.joint_k(jn) >= 0.999)
+		_check(pulled, "pulling the groover across cuts joint %d (%.2f)" % [jn, drive.joint_k(jn)])
+	await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "broom_finish", "the broom")
+	_check(drive.joints_cut() == 2, "two control joints are cut (%d)" % drive.joints_cut())
+	_check(drive.broom_coverage() < 0.01,
+		"and the slab is unbrushed everywhere (%.2f)" % drive.broom_coverage())
+	# THREE bays, one beat each, the eye beside the bay being brushed.
+	_check(runner.current_step().count == drive.bay_count(),
+		"one broom beat per bay (%d)" % runner.current_step().count)
+	for b in range(1, drive.bay_count() + 1):
+		var band := drive.bay_range(b)
+		await _settled()
+		var eye := main.camera.global_position
+		_check(absf(eye.z - (band.x + band.y) * 0.5) < 1.2 and eye.x < Driveway.CENTRE_X - Driveway.WIDTH * 0.5,
+			"the eye stands beside bay %d (%.1f, %.1f)" % [b, eye.x, eye.z])
+		runner.hold(false)
+		var swept := await _sweep_range(band.x + 0.3, band.y - 0.3,
+			func() -> float: return drive.broom_coverage_in(band.x, band.y))
+		_check(swept, "sweeping bay %d brushes it (%.2f)" % [b, drive.broom_coverage_in(band.x, band.y)])
+		if b < drive.bay_count():
+			var next_band := drive.bay_range(b + 1)
+			_check(drive.broom_coverage_in(next_band.x, next_band.y) < 0.05,
+				"and bay %d is still unbrushed (%.2f)" % [b + 1, drive.broom_coverage_in(next_band.x, next_band.y)])
+			await _until(func() -> bool: return runner.done_in_step >= b or runner.finished, "bay %d ends" % b)
+	await _until(func() -> bool: return runner.finished, "the broom finishes")
+	runner.hold(false)
+	main.clear_work_cursor()
+	_check(drive.broomed(), "and the broom finish is on (%d lines)" % drive.broom_lines())
+	var mixer_gone := main.machine("ConcreteTruck")
+	_check(mixer_gone != null and not mixer_gone.visible and not main.sfx.is_looping("leave"),
+		"and the mixer's background exit finished long ago, its idle stopped")
+
+
+# --- The payoff -------------------------------------------------------------------------------------
+
+func _the_payoff() -> void:
+	print("--- the payoff ---")
+	_check(_job_done == 1, "the job reported itself done once (%d)" % _job_done)
+	# Every phase the bar counts ended on the one "done" note, and only those:
+	# the machine beats stay silent, the last beat's done is the tada (1.6).
+	var wrong := 0
+	for e in _done_notes:
+		var i: int = e[0]
+		var want: bool = main.job.steps[i].progress_weight > 0 and i < main.job.steps.size() - 1
+		if (String(e[1]) == "done") != want:
+			wrong += 1
+	_check(_done_notes.size() == main.job.steps.size() and wrong == 0,
+		"every phase the bar counts ended on the 'done' note and only those (%d steps, %d wrong)"
+		% [_done_notes.size(), wrong])
+	_check(runner.progress == main.job.total_weight(),
+		"the bar is full (%d of %d)" % [runner.progress, main.job.total_weight()])
+	# The full bar is SEEN full through the tada, before it goes for the cure.
+	await get_tree().create_timer(0.3).timeout
+	_check(hud.chrome_alpha() > 0.9, "and it is seen full through the tada (%.2f)" % hud.chrome_alpha())
+	# The heap the tipper took away stays gone through the whole cure (the
+	# verification pass: the cure's fade used to re-show it from k = 0).
+	var heap_back := 0
+	while not drive.forms_stripped():
+		if drive.chunks_left() > 0:
+			heap_back += 1
+		await get_tree().process_frame
+	_check(heap_back == 0, "the heap stays gone through the cure (%d frames with rubble shown)" % heap_back)
+	var stripped := drive.forms_stripped()
+	_check(stripped, "the forms were stripped")
+	# The cure is a SHAPE (the plan's 3.4): the cones stand across the mouth of
+	# the drive - in FRONT of the slab, on the crossing - through the light
+	# sweep, and the boards come off AFTER it.
+	var cone_l := main.get_node_or_null("ConeL") as Node3D
+	var cone_r := main.get_node_or_null("ConeR") as Node3D
+	var mouth_l := Vector3(Driveway.CENTRE_X - 1.1, 0.0, Driveway.Z_KERB + 0.30)
+	var mouth_r := Vector3(Driveway.CENTRE_X + 1.1, 0.0, Driveway.Z_KERB + 0.30)
+	_check(cone_l != null and cone_r != null and cone_l.visible and cone_r.visible
+		and Vector2(cone_l.global_position.x - mouth_l.x, cone_l.global_position.z - mouth_l.z).length() < 1.3
+		and Vector2(cone_r.global_position.x - mouth_r.x, cone_r.global_position.z - mouth_r.z).length() < 1.3,
+		"the cones stand across the mouth of the drive while it cures")
+	_check(hud.chrome_alpha() < 0.05, "and the bar and hat are out of the picture (%.2f)" % hud.chrome_alpha())
+	# The kit goes at the CUT to the street (the verification pass: an ease to
+	# STREET had the fence blink out with the eye still turning). Watched
+	# frame by frame: the frame the fence disappears, the rig is standing
+	# still and the shot is STREET.
+	var fence_watch := main.get_node_or_null("Fence") as Node3D
+	var cut_ok := false
+	var cut_seen := false
+	while fence_watch != null and not cut_seen:
+		if not fence_watch.visible:
+			cut_seen = true
+			cut_ok = not main.rig.is_moving() and main.rig.current_shot() == CameraRig.STREET
+		elif hud.next_visible():
+			break
+		await get_tree().process_frame
+	_check(cut_seen and cut_ok, "the fence went at the cut to the street, with the rig standing still (%s)"
+		% (main.rig.current_shot() if main.rig != null else "?"))
+	var parked := await _until(func() -> bool: return hud.next_visible(), "NEXT appears")
+	_check(parked, "the car parked and NEXT came up")
+	_check(not hud.home_visible(), "and the house stays off the screen - NEXT is the way on")
+	_check(main.sfx.last_played == "voice_hatchback" or main.sfx.last_played == "horn",
+		"the car said thank-you in its own voice when it parked (%s)" % main.sfx.last_played)
+	_check(cone_l != null and cone_r != null and not cone_l.visible and not cone_r.visible,
+		"the cones were lifted out before the car turned in")
+	var fence := main.get_node_or_null("Fence") as Node3D
+	var tools_out := 0
+	for kind: String in main.tools:
+		if (main.tools[kind] as Node3D).visible:
+			tools_out += 1
+	_check(fence != null and not fence.visible and tools_out == 0,
+		"and the fence and the tools went at the cut, not in front of the child (%d tools left out)" % tools_out)
+	_check(main.car != null and main.car.visible, "there is a car on the new drive")
+	if main.car != null:
+		var spot := drive.park_spot()
+		_check(Vector2(main.car.global_position.x - spot.x, main.car.global_position.z - spot.z).length() < 1.0,
+			"parked ON it (%.2f m from the spot)" % Vector2(main.car.global_position.x - spot.x,
+				main.car.global_position.z - spot.z).length())
+	_check(main.garage_door_k() < 0.1,
+		"the garage is shut up for the night (%.2f)" % main.garage_door_k())
+	# NEXT is the one thing pointed at: the gold arrow is gone and NEXT wears
+	# the ring (the old "nothing points at anything" passed on a one-frame
+	# transient before the level had pointed at NEXT).
+	await _frames(2)
+	_check(not hud.arrow_visible(), "the gold arrow is gone")
+	_check(hud.aiming_at_button() and hud.ring_visible(), "and NEXT is the thing pointed at")
+	# A miss is never silent, even now: a press off NEXT kicks NEXT and is heard.
+	var away_px := Vector2(fr_payoff().x * 0.5, fr_payoff().y * 0.15)
+	var heard: String = main.sfx.last_played
+	main._payoff_press(_fake_touch(away_px, true))
+	_check(main.sfx.last_played == "pop" and heard != "pop", "a press off NEXT during the payoff is heard (%s)" % main.sfx.last_played)
+
+
+# --- Again -----------------------------------------------------------------------------------------------
+
+## NEXT reloads the scene, which frees the whole site - its Sfx, its loops and
+## the fallback synth's player - while the audio thread is still mixing. Freed
+## under a playing AudioStreamGenerator, that is the crash that killed one Car
+## Garage run in three (the improvement plan's 0.2). Reloading the CURRENT
+## scene from inside this test would reload the test, so the reload is stood
+## in for by freeing the site with its sounds running and building it again.
+func _the_second_job() -> void:
+	print("--- again: a second driveway ---")
+	if main.sfx != null:
+		main.sfx.play_loop("dieselidle", "probe")
+		main.sfx.play_group("tada")
+	var old := main
+	main.queue_free()
+	await _frames(3)
+	_check(not is_instance_valid(old), "the first site is freed with its sounds still playing")
+	var packed: PackedScene = load("res://scenes/site.tscn")
+	main = packed.instantiate() as SiteMain
+	add_child(main)
+	await _frames(2)
+	hud = main.hud
+	runner = main.runner
+	drive = main.drive
+	rings = main.get_node_or_null("Rings") as SpotRings
+	_check(runner != null and not runner.finished and runner.index == 0,
+		"a second driveway starts from the first bite")
+	_check(drive.panels_broken() == 0 and drive.fill_fraction() < 0.001,
+		"on a cracked old drive with nothing done to it")
+	_check(rings != null and rings.count() == 3, "with three rings on the first slab (%d)" % rings.count())
+	_check(not hud.home_visible(), "and the house off the screen again")
+	await _settled()
+	var id := rings.id_at(0)
+	_check(_tap_ring(id), "its first ring can be pressed")
+	await _until(func() -> bool: return not runner.is_busy(), "the second job's first bite")
+	_check(drive.spot_done(id), "and the bite lands (spot %d done)" % id)
+
+
+# --- Plumbing ------------------------------------------------------------------------------------------
+
+## Drags the work point over the whole slab the way a finger would, lane by lane,
+## and stops as soon as the beat says it has had enough.
+## The cursor walked from `from` to `to` with the finger down, then held at
+## `to` until `done` says so (or the cap). A DRAG beat's finger.
+func _drag_along(from: Vector3, to: Vector3, done: Callable, frames: int = 300) -> bool:
+	for frame in range(FRAME_CAP):
+		var t := minf(float(frame) / float(frames), 1.0)
+		main.set_work_cursor(from.lerp(to, t))
+		runner.hold(true)
+		await get_tree().process_frame
+		if bool(done.call()):
+			return true
+	return false
+
+
+## `_sweep` over one band of the drive only.
+func _sweep_range(z0: float, z1: float, coverage: Callable) -> bool:
+	var lanes := 5
+	var steps := 7
+	var at := 0
+	for frame in range(FRAME_CAP):
+		var lane := (at / steps) % lanes
+		var step := at % steps
+		var t := float(step) / float(steps - 1)
+		main.set_work_cursor(Vector3(
+			lerpf(Driveway.CENTRE_X - Driveway.WIDTH * 0.40,
+				Driveway.CENTRE_X + Driveway.WIDTH * 0.40, float(lane) / float(lanes - 1)),
+			Driveway.GRADE,
+			lerpf(z0, z1, t if lane % 2 == 0 else 1.0 - t)))
+		runner.hold(true)
+		await get_tree().process_frame
+		if float(coverage.call()) >= main.config.scrub_done:
+			return true
+		if frame % 4 == 3:
+			at += 1
+	return false
+
+
+func _sweep(coverage: Callable) -> bool:
+	var lanes := 5
+	var steps := 13
+	var at := 0
+	# Paced in FRAMES, not in laps. The work is paced in seconds and a headless
+	# frame is a fraction of a millisecond, so a fixed number of laps covers
+	# whatever fraction of the slab the machine happened to be fast enough for -
+	# which is how this first reported the mechanic broken at 0.78 covered.
+	for frame in range(FRAME_CAP):
+		var lane := (at / steps) % lanes
+		var step := at % steps
+		var t := float(step) / float(steps - 1)
+		main.set_work_cursor(Vector3(
+			lerpf(Driveway.CENTRE_X - Driveway.WIDTH * 0.40,
+				Driveway.CENTRE_X + Driveway.WIDTH * 0.40, float(lane) / float(lanes - 1)),
+			Driveway.GRADE,
+			lerpf(Driveway.Z_APRON + 0.35, Driveway.Z_KERB - 0.35,
+				t if lane % 2 == 0 else 1.0 - t)))
+		runner.hold(true)
+		await get_tree().process_frame
+		if float(coverage.call()) >= main.config.scrub_done:
+			return true
+		if frame % 4 == 3:
+			at += 1
+	return false
+
+
+## Waits for the camera to finish moving to the shot it has been sent to. The rig
+## eases over `shot_time`; a headless frame is a fraction of a millisecond, so
+## counting frames instead of asking is how a test ends up photographing a camera
+## still half way between two shots.
+func _settled() -> void:
+	await _until(func() -> bool: return not main.rig.is_moving(), "the camera to arrive")
+	await _frames(3)
+
+
+## Watches a truck's rearmost tyre for as long as `_watch_pad` is up.
+func _watch_wheels(m: Machine) -> void:
+	while _watch_pad:
+		if m.visible:
+			var tyre := m.global_position.z - m.rear_overhang()
+			if tyre < Driveway.Z_KERB + 0.05 and absf(m.global_position.x - Driveway.CENTRE_X) < Driveway.WIDTH:
+				_on_pad_frames[0] += 1
+		await get_tree().process_frame
+
+
+## Presses the gold ring carrying `id`, through the SCREEN, the way a finger
+## does - so the ring picking and the tap rule are both really exercised.
+func _tap_ring(id: int) -> bool:
+	if rings == null or main.camera == null:
+		return false
+	var i := rings.index_of(id)
+	if i < 0:
+		return false
+	var at := main.camera.unproject_position(rings.point_at(i))
+	main._press(at, true)
+	main._press(at, false)
+	return true
+
+
+func fr_payoff() -> Vector2:
+	return main.camera.get_viewport().get_visible_rect().size
+
+
+func _fake_touch(at: Vector2, pressed: bool) -> InputEventScreenTouch:
+	var ev := InputEventScreenTouch.new()
+	ev.index = 0
+	ev.position = at
+	ev.pressed = pressed
+	return ev
+
+
+## A real finger, through the viewport's own input pipeline, WITH its index:
+## `_press` is what a finger ends in, but which finger it was is decided before
+## that, in `SiteMain._unhandled_input`. Local coordinates: the same pixels
+## `unproject_position` speaks in.
+func _touch(index: int, at: Vector2, pressed: bool) -> void:
+	var ev := InputEventScreenTouch.new()
+	ev.index = index
+	ev.position = at
+	ev.pressed = pressed
+	get_viewport().push_input(ev, true)
+
+
+func _drag(index: int, at: Vector2) -> void:
+	var ev := InputEventScreenDrag.new()
+	ev.index = index
+	ev.position = at
+	get_viewport().push_input(ev, true)
+
+
+## The white wedge is itself a target (the improvement plan's 0.5): a press on
+## its BODY, out past the ring's own reach, works the ring it stands over. The
+## mime said "tap here", and a tap there was a miss.
+func _the_wedge() -> void:
+	var delay_was: float = hud.hint_delay
+	hud.hint_delay = 0.3
+	await get_tree().create_timer(0.7).timeout
+	_check(hud.hint_visible(), "on the third slab the white arrow comes back after a pause")
+	if not hud.hint_visible():
+		hud.hint_delay = delay_was
+		return
+	var over := rings.id_at(0)
+	var ring_px := main.camera.unproject_position(rings.point_at(0))
+	var hp := hud.hint_position()
+	var d := (hp - ring_px).normalized()
+	var body: float = hud._hint.arrow_size * (hud._hint.BACK + hud._hint.BACK_OFF)
+	var far := hp + d * body
+	var reach := main._reach_px()
+	_check(hud.arrow_hit(far), "the far end of the wedge counts as the wedge (%s; ring at %s)" % [str(far), str(ring_px)])
+	# A press on the wedge is answered by the nearest live ring when one is in
+	# reach of the finger (any ring on the slab is a right answer), and by the
+	# ring the wedge stands over when none is. Look for a point on the wedge's
+	# body that no ring reaches; press the far end when there is none.
+	var at := far
+	var free := false
+	for step in range(0, 14):
+		var p := hp + d * (body * 0.5 + 10.0 * float(step))
+		if rings.pick_nearest(main.camera, p, reach) == 0:
+			at = p
+			free = true
+			break
+	var near := rings.pick_nearest(main.camera, at, reach)
+	var rings_before := rings.count()
+	print("      pressing the wedge at %s (%s)" % [str(at),
+		"no ring in reach" if free else "ring %d in reach" % near])
+	main._press(at, true)
+	main._press(at, false)
+	await _frames(2)
+	_check(runner.is_busy(), "a press on the wedge starts a bite")
+	await _until(func() -> bool: return not runner.is_busy(), "the bite the wedge asked for")
+	if free:
+		_check(drive.spot_done(over), "and it works the ring the wedge stood over (spot %d)" % over)
+	else:
+		_check(drive.spot_done(near), "and it works the ring under the finger (spot %d)" % near)
+	_check(rings.count() == rings_before - 1, "one ring fewer on the slab (%d)" % rings.count())
+	hud.hint_delay = delay_was
+
+
+## Is the single-place hint (the ring-and-arrow the runner points with) up,
+## and inside the picture with a margin?
+func _hint_on_screen() -> bool:
+	var pointer := main.get_node_or_null("Pointer") as SpotRings
+	if pointer == null or not pointer.lit():
+		print("      no hint is up")
+		return false
+	var frame := main.camera.get_viewport().get_visible_rect().size
+	for at in pointer.points():
+		if main.camera.is_position_behind(at):
+			print("      hint at %s is BEHIND the camera" % str(at))
+			return false
+		var p := main.camera.unproject_position(at)
+		var margin := frame.y * 0.06
+		if p.x < margin or p.y < margin or p.x > frame.x - margin or p.y > frame.y - margin:
+			print("      hint at %s projects to %s, frame %s" % [str(at), str(p), str(frame)])
+			return false
+	return true
+
+
+## The mean vertical speed over a wall-clock window of (seconds, height) samples:
+## the slope between the first and last sample inside it. 0 with fewer than two.
+func _speed_over(samples: Array[Vector2], t0: float, t1: float) -> float:
+	var inside: Array[Vector2] = []
+	for s in samples:
+		if s.x >= t0 - 1e-6 and s.x <= t1 + 1e-6:
+			inside.append(s)
+	if inside.size() < 2 or inside[inside.size() - 1].x - inside[0].x < 1e-4:
+		return 0.0
+	return (inside[inside.size() - 1].y - inside[0].y) / (inside[inside.size() - 1].x - inside[0].x)
+
+
+## How many times two world polylines cross on the screen, through the live
+## camera (points behind it are left out).
+func _screen_crossings(a: PackedVector3Array, b: PackedVector3Array) -> int:
+	var pa: Array[Vector2] = []
+	var pb: Array[Vector2] = []
+	for p in a:
+		if not main.camera.is_position_behind(p):
+			pa.append(main.camera.unproject_position(p))
+	for p in b:
+		if not main.camera.is_position_behind(p):
+			pb.append(main.camera.unproject_position(p))
+	var n := 0
+	for i in range(pa.size() - 1):
+		for j in range(pb.size() - 1):
+			if Geometry2D.segment_intersects_segment(pa[i], pa[i + 1], pb[j], pb[j + 1]) != null:
+				n += 1
+	return n
+
+
+## How far apart two colours sit round the hue wheel, 0 to 0.5.
+func _hue_gap(a: Color, b: Color) -> float:
+	var d := absf(a.h - b.h)
+	return minf(d, 1.0 - d)
+
+
+## How many pixel ROWS apart two world points land in the picture, through the
+## live camera; 0 when either is behind it.
+func _px_rows(a: Vector3, b: Vector3) -> float:
+	if main.camera == null or main.camera.is_position_behind(a) or main.camera.is_position_behind(b):
+		return 0.0
+	return absf(main.camera.unproject_position(a).y - main.camera.unproject_position(b).y)
+
+
+## Is one world point inside the picture?
+func _on_screen(at: Vector3) -> bool:
+	if main.camera == null or main.camera.is_position_behind(at):
+		return false
+	var frame := main.camera.get_viewport().get_visible_rect().size
+	var p := main.camera.unproject_position(at)
+	return p.x >= 0.0 and p.y >= 0.0 and p.x <= frame.x and p.y <= frame.y
+
+
+## Is every lit ring inside the picture? A ring the camera cannot see is a place
+## the child cannot tap, which is the whole of this round's first note.
+func _all_rings_on_screen() -> bool:
+	if rings == null or main.camera == null:
+		return false
+	var frame := main.camera.get_viewport().get_visible_rect().size
+	var okay := true
+	for at in rings.points():
+		if main.camera.is_position_behind(at):
+			print("      ring at %s is BEHIND the camera" % str(at))
+			okay = false
+			continue
+		var p := main.camera.unproject_position(at)
+		var margin := frame.y * 0.05
+		if p.x < margin or p.y < margin or p.x > frame.x - margin or p.y > frame.y - margin:
+			print("      ring at %s projects to %s, frame %s" % [str(at), str(p), str(frame)])
+			okay = false
+	return okay
+
+
+## How many of a machine's meshes under `part` are being drawn.
+func _drawn(m: Machine, part: String) -> int:
+	var node := m.node_for(part)
+	if node == null:
+		return 0
+	var n := 0
+	if node is MeshInstance3D and (node as MeshInstance3D).visible:
+		n += 1
+	for child in node.find_children("*", "MeshInstance3D", true, false):
+		if (child as MeshInstance3D).visible:
+			n += 1
+	return n
+
+
+## The albedo alpha a machine's part is drawn at: 1 when nothing has faded it.
+func _alpha_of(m: Machine, part: String) -> float:
+	var node := m.node_for(part)
+	if node == null:
+		return 1.0
+	var meshes: Array[Node] = node.find_children("*", "MeshInstance3D", true, false)
+	if node is MeshInstance3D:
+		meshes.append(node)
+	for n in meshes:
+		var mi := n as MeshInstance3D
+		if mi.mesh == null or mi.mesh.get_surface_count() == 0:
+			continue
+		var mat := mi.get_surface_override_material(0)
+		if mat is BaseMaterial3D:
+			return (mat as BaseMaterial3D).albedo_color.a
+	return 1.0
+
+
+## Are both ends of a line across the drive inside the picture? The camera is
+## where it really is, so this is the question the user asked: "camera couldn't
+## see all the joints being made".
+func _both_ends_visible(z: float) -> bool:
+	var cam := main.camera
+	if cam == null:
+		return false
+	var frame := cam.get_viewport().get_visible_rect().size
+	for side: float in [-0.5, 0.5]:
+		var at := Vector3(Driveway.CENTRE_X + Driveway.WIDTH * side, Driveway.GRADE, z)
+		if cam.is_position_behind(at):
+			return false
+		var p := cam.unproject_position(at)
+		if p.x < 0.0 or p.y < 0.0 or p.x > frame.x or p.y > frame.y:
+			return false
+	return true
+
+
+## Waits for `cond` to come true, or fails when it never does. Never counts
+## frames to decide a beat is DONE - only to give up.
+func _until(cond: Callable, what: String) -> bool:
+	for i in range(FRAME_CAP):
+		if bool(cond.call()):
+			return true
+		await get_tree().process_frame
+	_check(false, "TIMED OUT waiting for %s" % what)
+	return false
+
+
+func _frames(n: int) -> void:
+	for i in range(n):
+		await get_tree().process_frame
+
+
+func _check(ok: bool, what: String) -> void:
+	_checks += 1
+	if not ok:
+		_failures += 1
+	print("%s %s" % ["  ok " if ok else "FAIL", what])
+
+
+func _list(a: PackedStringArray) -> String:
+	return "none" if a.is_empty() else ", ".join(a)
