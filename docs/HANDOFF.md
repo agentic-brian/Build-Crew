@@ -23,7 +23,12 @@ disagree.
   session-4 section of the log records every frame's args (a table).
 - The groover's GLB was re-exported (`tools/make_site_props.py --only Jointer`,
   Blender 4.5 at `C:/Program Files/Blender Foundation/Blender 4.5/blender.exe`).
-- Nothing is committed: `build-crew/` is not a git repository.
+- Git: https://github.com/agentic-brian/Build-Crew (PUBLIC), branch `main`, first
+  commit 2026-09-15 at the end of session 4. `renders/` and `.godot/` are not
+  tracked (car-fixer's `.gitignore`/`.gitattributes`). The repo can be public
+  because nothing in it is Synty: every GLB comes from the project's own
+  Blender builders. Keep it that way - a Synty source file must never be
+  committed here.
 - The plan is mirrored as a claude.ai artifact:
   https://claude.ai/artifact/9KMi86cKwKDvk31a56xSp7. From a new conversation
   you must `read` that URL with the Artifact tool before you can publish to it
