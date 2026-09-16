@@ -3060,3 +3060,79 @@ over one peg and a mime over another is two instructions; the spray's drop count
 is a number to retune if 220 still reads thin at a long aim; and the seven unused
 `voice_*` sound groups that the notices file now names are still on disk, for
 the export pass to delete.
+
+# The export pass (2026-09-16): 6.4 part 4, and what actually ships
+
+The last piece of the Kids-category chrome, and the least glamorous: the file
+that decides what goes into the bundle, the picture on the home screen, and the
+one shown while the game loads.
+
+## The icon is the game's own machine
+
+`tools/make_appicon.gd` renders the **skid steer wearing its push blade** —
+`MachineIcons.spec("skid")`, the same spec the title row seats and the call
+button answers — out of `SkidSteer.glb` and `PushBlade.glb`, orthographic, on
+the family cream inside a band of the family orange. Fifteen sizes, all reduced
+with Lanczos from one 2048 px master, every one opaque and square.
+
+A drawn icon was the obvious alternative and the wrong one. It would be the only
+picture in this family the game itself cannot make, and it would be wrong the
+first time the model changed — the same class of drift the sledge's pose had
+just been caught in, where the screenshots showed one thing and play did
+another. Rendering it means the icon cannot lie about the machine.
+
+Orthographic for the same reason every other icon here is: at 40 px a model in
+perspective LEANS, and the lean reads as a mistake. Opaque and square because
+iOS rounds the corners itself, and an icon that rounds its own gets rounded
+twice. No words on it — an icon is the first thing a child sees.
+
+## The splash is the one picture that carries words
+
+The Big Little Jobs wordmark on cream, from `tools/make_splash.gd`, from a logo
+that lives under `tools/brand/` behind a `.gdignore` so it is never imported or
+exported. This is worth saying out loud rather than letting a later session
+find it and think the words rule was broken: **7g governs what the GAME draws.**
+The splash is the mark of who made it, shown before the game starts — the same
+status as the name on the store listing. The letterbox is the same cream as the
+picture, so no screen shape shows a band of black.
+
+## The preset, and a probe that reads it
+
+`export_presets.cfg` has both presets — iOS and a desktop one, so the game can
+be played without a phone. Bundle `com.biglittlejobs.buildcrew`, iOS 15, phone
+AND iPad (the pair of shapes the safe-area pass was built for), nothing tracked
+and nothing declared collected, the licence texts carried in and `renders/`,
+`scenes/dev/`, `scripts/tools/`, `tools/` and `docs/` kept out.
+
+An export preset is a file nobody reads until a build fails or, worse, until one
+succeeds carrying something it should not — so `export_probe` (25 checks) reads
+it instead. It holds every claim above to the files: that the bundle is this
+game's and demonstrably not a sibling's (one wrong identifier uploads Build Crew
+over Car Garage, and the store shows the mistake days later); that every icon
+the preset names is on disk, is **exactly the size its own key claims**, and is
+opaque; that the splash is where the project says; and that **no shipped scene
+reaches into a folder the filter excludes**, which is a build that boots to a
+blank screen and says nothing until it is on a device.
+
+## Fourteen files of sound nobody could hear
+
+Seven `voice_*` groups came across with Car Garage's library — ambulance,
+firetruck, garbagetruck, racecar, schoolbus, sportscar, towtruck — for vehicles
+this game has no table entry for. `SiteLook.HOME_CARS` is closed at six, so
+nothing could ever select them: dead weight in the bundle, and seven licence
+claims in the notices for sounds no child will hear. Deleted; 141 mp3s in 69
+groups now, not 155 in 76, and the notices re-counted to match. `export_probe`
+asserts every vehicle voice left on disk belongs to a car this game can draw, so
+the next carried-over library cannot quietly add more.
+
+## What is still open, and it is release-blocking
+
+The parental gate opens <https://biglittlejobs.com/privacy>, and that document
+lists Tree Crew and Car Garage and describes neither of the two files this game
+writes. **The one link out of the app points at a page that does not name this
+app** — which is the single thing the Kids-Category gate exists to make good. It
+lives in the marketing site's own repository and shipping it means a rebuild and
+a deploy, so it is written down here and in the plan rather than done quietly.
+
+**Green: `EXPORT_PROBE PASS 25/25`, and the rest of the suite unmoved by any of
+it (2026-09-16).**

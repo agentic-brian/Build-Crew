@@ -958,3 +958,44 @@ the contract:
   and `motion_probe` (the camera stops, the world does not). Every probe sets
   `Settings.motion_override = -1`: a test decided by the developer's own OS
   settings is not a test.
+
+### 7h. The export pass (2026-09-16): what actually ships
+
+- **`export_presets.cfg` is the contract, and `export_probe` reads it.** A preset
+  is a file nobody looks at until a build fails or, worse, until one succeeds
+  carrying something it should not. Twenty-five checks: the bundle is
+  `com.biglittlejobs.buildcrew` and demonstrably not a sibling's (one wrong
+  identifier uploads this game over Car Garage); iOS 15, phone AND iPad, which
+  is the pair of shapes the safe-area pass was built for; nothing tracked and
+  nothing declared collected; the licence texts carried IN on both presets and
+  `renders/`, `scenes/dev/`, `scripts/tools/`, `tools/` and `docs/` kept OUT;
+  and no shipped scene reaching into a folder the filter excludes, which is a
+  build that boots to a blank screen and says nothing until it is on a device.
+- **The icon is RENDERED, not drawn** (`tools/make_appicon.gd`): the skid steer
+  wearing its push blade, out of `SkidSteer.glb` and `PushBlade.glb` through
+  `MachineIcons.spec("skid")` - the same machine the title row seats and the
+  call button answers. A drawn icon would be the one picture in this family the
+  game itself cannot make, and it would drift the first time the model changed.
+  Orthographic, because at 40 px a model in perspective LEANS and the lean reads
+  as a mistake. One 2048 px master, Lanczos down to fifteen sizes, every one
+  opaque and square: iOS rounds the corners itself, and an icon that rounds its
+  own gets rounded twice. **No words on it** - an icon is the first thing a
+  child sees.
+- **The splash is the one picture in this product that carries words.**
+  `tools/make_splash.gd` puts the Big Little Jobs wordmark on the family cream,
+  from a logo under `tools/brand/` behind a `.gdignore` so it is never imported
+  or exported. 7g's rule governs what the GAME draws; this is the mark of who
+  made it, shown before the game starts - the same status as the name on the
+  store listing. The letterbox is `boot_splash/bg_color`, the same cream, so no
+  screen shape shows a band of black.
+- **Sound nobody can hear is not shipped.** Seven `voice_*` groups came across
+  with Car Garage's library for vehicles this game has no table entry for
+  (`SiteLook.HOME_CARS` is closed at six), so nothing could ever select them:
+  fourteen files, deleted. `export_probe` asserts every vehicle voice left on
+  disk belongs to a car this game can draw, so the next carried-over library
+  cannot quietly add more.
+- **Still open, and release-blocking for the Kids Category:** the published
+  privacy policy at <https://biglittlejobs.com/privacy> lists Tree Crew and Car
+  Garage and describes neither of the two files this game writes. The parental
+  gate opens a document that does not name this app, which is the one thing the
+  gate exists to make good. It lives in the marketing site's own repository.

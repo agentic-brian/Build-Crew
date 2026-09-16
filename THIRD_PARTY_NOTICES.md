@@ -89,24 +89,24 @@ and false of the other.
 
 ## Sound effects
 
-155 mp3 files in 76 groups under `assets/sfx/`, generated with **ElevenLabs
+141 mp3 files in 69 groups under `assets/sfx/`, generated with **ElevenLabs
 Sound Effects v2** on a paid plan. Where each group's generation record lives,
 split the way the models are above:
 
 - **44 groups are recorded in `docs/sfx.md`** — the clips made for this game,
   with the flow that made each one and what it is for.
-- **32 groups (68 files) came across from Car Garage's library** —
+- **25 groups (54 files) came across from Car Garage's library** —
   `airflow`, `breath`, `clink`, `crank`, `drip`, `engine_rough`, `engine_start`,
   `glug`, `heave`, `key`, `latch`, `paintspray`, `purr`, `ratchet`, `reel`,
   `roar`, `roll`, `sander`, `snap`, `sparkle`, `sputter`, `squeal`,
-  `tirebounce`, `valveclick`, `wiper` and seven unused `voice_*` groups. Same
-  model, flow "Car Fixer SFX"; their record is in `car-fixer/docs/sfx.md`, and
-  **that repository is private**, so this public one cannot produce their dates
-  on its own.
+  `tirebounce`, `valveclick` and `wiper`. Same model, flow "Car Fixer SFX";
+  their record is in `car-fixer/docs/sfx.md`, and **that repository is
+  private**, so this public one cannot produce their dates on its own.
 
-The seven unused `voice_*` groups (ambulance, firetruck, garbagetruck, racecar,
-schoolbus, sportscar, towtruck) can never be selected — `SiteLook`'s car table
-is closed at six vehicles — and are worth deleting when the export preset lands.
+Seven `voice_*` groups (ambulance, firetruck, garbagetruck, racecar, schoolbus,
+sportscar, towtruck) were carried over and could never be selected —
+`SiteLook`'s car table is closed at six vehicles — so the export pass deleted
+them rather than ship fourteen files of audio no child can ever hear.
 
 ElevenLabs grants commercial use of generated audio to accounts on a paid plan,
 and that grant hangs on the subscription having been live on the generation
@@ -130,12 +130,28 @@ with the account holder, not the generator.
 
 ## Shipping this file
 
-When the iOS export preset lands (the plan's 6.4 part 4), its include filter
-carries these files into the bundle:
+`export_presets.cfg` carries these files into the bundle through its include
+filter, on both presets:
 
 ```
 include_filter="licenses/*.txt,THIRD_PARTY_NOTICES.md"
+exclude_filter="renders/*,scenes/dev/*,scripts/tools/*,tools/*,docs/*"
 ```
 
 They ship as files. They are not shown, read out, or linked from anywhere inside
-the game.
+the game. `export_probe` holds the preset to both lines.
+
+## The icon and the splash
+
+Neither is a drawing. The **app icon** is the skid steer wearing its push blade,
+rendered from `assets/models/machines/SkidSteer.glb` and
+`assets/models/props/PushBlade.glb` by `tools/make_appicon.gd` — the same
+`MachineIcons` spec the title row seats — orthographic, on the family cream
+inside an orange band, with no words on it. Fifteen sizes, all reduced from one
+2048 px master.
+
+The **splash** is the Big Little Jobs wordmark, built by `tools/make_splash.gd`
+from `tools/brand/bl_jobs_logo_primary.png`, which lives behind a `.gdignore` so
+it is never imported or exported. It is the one picture in this product that
+carries words: DESIGN 7g's rule governs what the GAME draws, and this is the
+mark of who made it, shown before the game starts.

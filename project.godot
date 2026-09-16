@@ -15,6 +15,18 @@ config/description="A tiny game about building one driveway, start to finish."
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(1, 0.952941, 0.807843, 1)
+; The publisher's wordmark on the family cream, built by `tools/make_splash.gd`
+; from the logo under `tools/brand/` (behind a `.gdignore`, so it is never
+; imported or exported). It carries WORDS, and it is the one place in this
+; product that does: DESIGN 7g's rule is about what the GAME draws, and this is
+; the mark of who made it, shown before the game starts - the same status as the
+; name on the App Store listing. `stretch_mode` Keep, so the same picture lands
+; on a desktop window, an iPad and a phone, and whatever a screen's shape
+; letterboxes is the same cream as `bg_color`.
+boot_splash/image="res://assets/brand/splash.png"
+; The skid steer wearing its push blade, rendered from the game's own GLB by
+; `tools/make_appicon.gd`. No words: an icon is the first thing a child sees.
+config/icon="res://assets/brand/appicon/icon_1024.png"
 
 [debug]
 

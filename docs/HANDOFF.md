@@ -29,9 +29,18 @@ disagree.
   fixes: `SITE_SMOKE PASS 492/492`, `RESUME_PROBE PASS 315/315`,
   `TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`, `MACHINE_PROBE PASS
   20/20`, `SETTINGS_PROBE PASS 24/24`, `PRIVACY_PROBE PASS 31/31`,
-  `SAFE_AREA PASS 23/23` (run twice, once per device shape) and `MOTION_PROBE
-  PASS 16/16`. (The resume probe has six checks fewer than session 8's 321
-  because the compaction is one beat now, not three.)
+  `SAFE_AREA PASS 23/23` (run twice, once per device shape), `MOTION_PROBE
+  PASS 16/16` and `EXPORT_PROBE PASS 25/25`. (The resume probe has six checks
+  fewer than session 8's 321 because the compaction is one beat now, not three.)
+- **THE EXPORT PASS IS BUILT** (6.4 part 4, `DESIGN.md` 7h): `export_presets.cfg`
+  with an iOS and a Windows preset, bundle id `com.biglittlejobs.buildcrew`,
+  fifteen icons RENDERED from the game's own SkidSteer + PushBlade GLBs by
+  `tools/make_appicon.gd`, the splash from `tools/make_splash.gd`, and
+  `config/icon`. Seven unreachable `voice_*` sound groups were deleted (141 mp3s
+  in 69 groups now, not 155 in 76). **What is left of 6.4 is the published
+  privacy policy**, which names Tree Crew and Car Garage and neither of this
+  game's two files - release-blocking for the Kids Category, and it lives in
+  `big-little-jobs-site/src/PrivacyPolicy.tsx`.
 - **THE PLAYTEST OF 2026-09-16 IS BUILT** (the last section of
   `docs/critic_log.md`). Four notes, one of which was a WALL: the compaction
   could not be finished by anybody, and is a CLOCK now - `pack_seconds` 5.5,
@@ -87,31 +96,34 @@ disagree.
 
 ## What is next
 
-1. **A playtest.** The user has not reported playing sessions 2-6. Worth their
-   eyes most: backing the trucks in (is a held finger on a moving truck fun or
-   a chore, and is 4.5 s of holding right); the plate compactor (three bays of
-   dragging, about 10 s each in the smoke - is it too long, and does the packed
-   base read as different); the kerb board's own little phase; stripping the
-   boards; the rebar phase; NEXT into a second, different driveway; and closing
-   the app mid-job and opening it again.
-2. **6.4 part 4, the only piece of the chrome still open.** `export_presets.cfg`
-   (there is none in this project yet), the bundle id
-   `com.biglittlejobs.buildcrew`, the fifteen iOS icon sizes, the splash, and
-   `application/config/icon`. Car Garage's preset and its
-   `tools/tidy_ios_export.py` (already copied to `tools/`) are the pattern; the
-   include filter must carry `licenses/*.txt,THIRD_PARTY_NOTICES.md`. The
-   marketing site's policy page also needs its Build Crew rows
-   (`big-little-jobs-site`) - and while you are in that file, line 193 of
-   `src/PrivacyPolicy.tsx` prints two literal `\u2014` on the parental-gate
-   bullet.
-3. **6.5, the next jobs.** A second seat is a line in `jobs.json` plus a
-   `JobIcons` row - but read the session-7 log first: the sidewalk flag's seat
+1. **The published privacy policy - the last piece of 6.4, and release-blocking
+   for the Kids Category.** The parental gate opens
+   <https://biglittlejobs.com/privacy>, and that document lists Tree Crew and
+   Car Garage and describes neither of the two files this game writes. In
+   `big-little-jobs-site/src/PrivacyPolicy.tsx`: add Build Crew to the `apps`
+   table (:14) and two rows to `stored` (:20) - the save holds which job, how
+   many rows it had, which row and how far into it, which of its places are
+   done, and the number that draws the visit's look; the settings file holds
+   loudness and `music_on` and nothing else. Fix the prose at :127 that implies
+   Tree Crew is the only app keeping progress, bump `EFFECTIVE`, rebuild
+   `dist/` and deploy. While in that file, line 193 prints two literal
+   `—` on the parental-gate bullet.
+2. **6.5, the next jobs.** A second seat is a line in `data/jobs/jobs.json` plus
+   a `JobIcons` row - but read the session-7 log first: the sidewalk flag's seat
    needs a two-part picture, and three of the four next jobs would seat a
-   machine that looks like the driveway's at 250 px.
+   machine that looks like the driveway's at 250 px. The sidewalk flag also
+   forces the Slab-spec refactor every later job needs.
+3. **Another playtest.** The one on 2026-09-16 was the first since session 1,
+   and it found a phase nobody could finish in the first two minutes of play.
+   Worth their eyes now: the compaction at its new clock (is 5.5 s right, and
+   does the whole base settling read as earned); the sledge's swing and its
+   wait; backing the trucks in; stripping the boards; NEXT into a second,
+   different driveway; and closing the app mid-job and opening it again.
 4. **Small passes found and not taken** (the logs' "Not taken"): the tool
    fly-in snap shared by the sledge, the jackhammer and the screed; a kept
    tap's ring coming back through the beat it plays; held tools waiting on the
-   lawn until the first press; and session 5's own list (the log).
+   lawn until the first press; the spray's drop count if 220 still reads thin at
+   a long aim; and session 5's own list (the log).
 
 ## The session ritual (every session ends this way)
 
@@ -165,6 +177,12 @@ Run everything from `build-crew/` (`--path .`).
   PER DEVICE SHAPE:
   `res://scenes/dev/safe_area_probe.tscn -- --canvas=1565x720` and
   `... -- --canvas=1280x960 --device=ipad`.
+- The export probe (instant; the preset, the fifteen icons, the splash, the
+  filters, and that no sound is shipped nobody can play):
+  `--headless --path . res://scenes/dev/export_probe.tscn`
+- Rebuilding the icon or the splash after a model or logo change:
+  `--path . -s tools/make_appicon.gd` (NOT headless - it renders) and
+  `--headless --path . -s tools/make_splash.gd`
 - Smoke (about ten minutes; run it in the background to a log file and grep it
   for `SITE_SMOKE` and `FAIL`):
   `--headless --path . res://scenes/dev/site_smoke.tscn`

@@ -849,8 +849,8 @@ will hang on the house.
   somewhere to stand.
 
 ### 6.4 The Kids-category chrome, in this order (L, the checklist)
-**Parts 1, 2, 3, 5 and 7 DONE 2026-09-16 (session 8); 4 and 6 are what is
-left.** The settings cog is on BOTH screens (a four-year-old learns one place
+**Parts 1, 2, 3, 4, 5 and 7 DONE 2026-09-16; part 6 is HALF done - the name is
+answered (Build Crew), the published policy is not.** The settings cog is on BOTH screens (a four-year-old learns one place
 once, and "reachable from inside the app" cannot mean "from the one screen the
 reviewer opened"); it pauses the job under it and lets go of every finger that
 was down, including the title's held "new drive" disc, which would otherwise
@@ -869,8 +869,23 @@ and describes neither of the two files this game writes. The gate opens a
 document that does not name this app, which is the one thing the gate exists to
 make good, so this is release-blocking for the Kids Category and belongs with
 part 4. Part 4 (export presets, the fifteen icons, the splash, the bundle id)
-is otherwise the only piece left, and every place the name has to go is listed
-in the session-8 log.
+is DONE too, as of the same day: `export_presets.cfg` with both presets, the
+bundle id `com.biglittlejobs.buildcrew`, iOS 15, phone and iPad, the licence
+texts carried in and the renders, probes, harnesses, Blender tools and docs kept
+out; fifteen icons built by `tools/make_appicon.gd` from the game's OWN
+SkidSteer and PushBlade GLBs (not a drawing - a drawing is the one picture in
+this family the game cannot make, and it drifts the first time the model
+changes); the splash from `tools/make_splash.gd`; `config/icon`; and a new
+`export_probe` (25 checks) that holds every one of those claims to the files.
+Seven `voice_*` sound groups that `SiteLook`'s closed six-car table could never
+select were deleted rather than shipped.
+
+**What is left of 6.4 is the POLICY, and it is release-blocking**: the document
+the parental gate opens lists Tree Crew and Car Garage and describes neither of
+the two files this game writes. It lives in `big-little-jobs-site`
+(`src/PrivacyPolicy.tsx`: the `apps` table at :14 and the `stored` table at :20,
+plus the prose at :127 that says Tree Crew is the only app keeping progress),
+and shipping it means rebuilding and deploying that site.
 1. The settings cog, the eleven-step slider and the music toggle
    (`settings_menu.gd`; `Settings` is already here, so this is UI only). It
    is the one thing a parent reaches for in the first two minutes, and the
