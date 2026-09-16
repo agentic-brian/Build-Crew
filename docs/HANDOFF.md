@@ -32,6 +32,14 @@ disagree.
   `SAFE_AREA PASS 23/23` (run twice, once per device shape), `MOTION_PROBE
   PASS 16/16` and `EXPORT_PROBE PASS 25/25` - and after the slab spec,
   `SITE_SMOKE 494/494` and `TITLE_PROBE 66/66`.
+- **The shape COUNTS are spec fields too** (`DESIGN.md` 7j): joints, bars along
+  and across, stakes per long and short board, form groups, spots per panel.
+  The form list's SHAPE did not move and waits for the flag.
+- **DECISION 8 IS ANSWERED: one save PER JOB.** Each seat remembers its own
+  half-finished job. `SaveGame` becomes `version` 2 with a `jobs` map keyed by
+  job name, migrating the current document; each seat shows its own carry-on
+  state; the corner disc clears only the job being looked at. **This is the next
+  session's first work**, before any flag data exists to need it.
 - **6.5 IS STARTED: the slab spec is built** (`DESIGN.md` 7i). A job carries its
   own rectangle (`scripts/slab_spec.gd`, `JobDef.slab`), pushed UNCONDITIONALLY
   at `SiteMain._enter_tree`; `Driveway`'s nine rectangle constants are
@@ -104,7 +112,14 @@ disagree.
 
 ## What is next
 
-1. **The published privacy policy - the last piece of 6.4, and release-blocking
+1. **One save per job** (decision 8, answered 2026-09-16). `SaveGame` is one
+   document with one `job` key today, and `SiteMain._write_progress` overwrites
+   it on the first beat of whatever the child starts. Make it `version` 2 with a
+   `jobs` map, migrate the v1 document into its own slot, give `StartMenu` a
+   per-seat carry-on state, and make `TitleMain._on_fresh` clear only the job
+   being looked at. `resume_probe` and `privacy_probe` both pin the save's keys,
+   so both move with it.
+2. **The published privacy policy - the last piece of 6.4, and release-blocking
    for the Kids Category.** The parental gate opens
    <https://biglittlejobs.com/privacy>, and that document lists Tree Crew and
    Car Garage and describes neither of the two files this game writes. In
@@ -116,18 +131,18 @@ disagree.
    Tree Crew is the only app keeping progress, bump `EFFECTIVE`, rebuild
    `dist/` and deploy. While in that file, line 193 prints two literal
    `—` on the parental-gate bullet.
-2. **6.5, the next jobs.** A second seat is a line in `data/jobs/jobs.json` plus
+3. **6.5, the flag itself.** A second seat is a line in `data/jobs/jobs.json` plus
    a `JobIcons` row - but read the session-7 log first: the sidewalk flag's seat
    needs a two-part picture, and three of the four next jobs would seat a
    machine that looks like the driveway's at 250 px. The sidewalk flag also
    forces the Slab-spec refactor every later job needs.
-3. **Another playtest.** The one on 2026-09-16 was the first since session 1,
+4. **Another playtest.** The one on 2026-09-16 was the first since session 1,
    and it found a phase nobody could finish in the first two minutes of play.
    Worth their eyes now: the compaction at its new clock (is 5.5 s right, and
    does the whole base settling read as earned); the sledge's swing and its
    wait; backing the trucks in; stripping the boards; NEXT into a second,
    different driveway; and closing the app mid-job and opening it again.
-4. **Small passes found and not taken** (the logs' "Not taken"): the tool
+5. **Small passes found and not taken** (the logs' "Not taken"): the tool
    fly-in snap shared by the sledge, the jackhammer and the screed; a kept
    tap's ring coming back through the beat it plays; held tools waiting on the
    lawn until the first press; the spray's drop count if 220 still reads thin at

@@ -3257,3 +3257,75 @@ argument against promising it in one.
 `MACHINE_PROBE PASS 20/20`, `SETTINGS_PROBE PASS 24/24`,
 `PRIVACY_PROBE PASS 31/31`, `SAFE_AREA PASS 23/23` (both shapes),
 `MOTION_PROBE PASS 16/16`, `EXPORT_PROBE PASS 25/25` (2026-09-16).**
+
+# 6.5, session two (2026-09-16): the counts, and a decision that belonged to the user
+
+The rectangle moved into the job last session. This one moves the COUNTS, and
+stops at the thing that is not a count.
+
+## Seven numbers a flag and a drive disagree about
+
+`joint_count()` returned a hard `2`. `BARS_ALONG` was 4 and `BARS_ACROSS` 8.
+`form_group_count()` returned `3`. The stakes were a literal list,
+`count := [4, 4, 2, 0]`. And `SPOTS_PER_PANEL` was 3. All seven are now
+`SlabSpec` fields carried by the job, with the driveway's own numbers written
+into `new_driveway.tres` where the job can see them.
+
+They are DATA rather than arithmetic off the rectangle, on purpose. Four stakes
+to a board and three bites to a panel are pacing decisions the critic rounds
+argued about — "twelve taps is a phase, forty is a chore" — and a formula
+derived from the slab's area would quietly overrule every one of them.
+
+Proved the same way the rectangle was, because the same trap applies: the
+defaults are the driveway's numbers, so all 494 checks pass whether the fields
+are read or dead.
+
+```
+AT THE JOB'S COUNTS  bays=3 bars=12 stakes=10 groups=3 spots/panel=3
+AT A FLAG'S COUNTS   bays=2 bars=5  stakes=5  groups=1 spots/panel=2
+PUT BACK: true
+```
+
+## What deliberately did not move
+
+The SHAPE of the form list. A driveway is two long boards, a kerb board and an
+expansion strip against the garage; a flag is two boards, with the kerb face and
+a neighbouring flag for its other two sides. That is a different structure, not
+a different number — and inventing the abstraction with one case to check it
+against is how the wrong abstraction gets built. It waits for the flag, and the
+spec says so in its own docstring so the next session does not treat the
+omission as an oversight.
+
+## A frame that would have lied
+
+`stage_step` looked a `--stage` up by verb and clamped a miss to row 0. With one
+job that could not happen. With two it is a silent wrong picture: `--stage=tipped`
+against a job with no plate compactor would have posed the first bite of the
+jackhammer and captured it as the base being packed, with no warning anywhere.
+It warns now, and records `stage_missed` so a harness can refuse the frame.
+`STAGE_STEP` is still the driveway's own table; every later job needs its own.
+
+## And a question that was not ours to answer
+
+The survey turned up a design decision hiding inside the second job, and it
+belonged to the user rather than to a session: **with two seats a child can have
+one unfinished job, and starting the other overwrites it on the first beat** —
+silently, with no hold and nothing on screen, in a game whose corner disc puts
+"throw a drive away" behind a 0.9 s hold on its own orange disc. Two honest
+answers: one save per job, or one save with the mismatched seat behind the same
+hold.
+
+**Answered: a save per job.** Each disc remembers its own half-finished job, so
+no child ever loses work by pressing the wrong disc. `SaveGame` becomes
+`version` 2 with a `jobs` map keyed by job name, the current single-job document
+migrates into its own slot, each seat shows its own carry-on state, and the
+corner disc throws away only the job being looked at. It is decision 8 in the
+plan, and it is the next session's FIRST work — deliberately before any flag
+data exists to need it, so the migration is written against a save that is real
+rather than one invented to test it.
+
+**Green: `SITE_SMOKE PASS 494/494`, `TITLE_PROBE PASS 66/66`,
+`RESUME_PROBE PASS 315/315`, `SWITCH_PROBE PASS 18/18`,
+`MACHINE_PROBE PASS 20/20`, `SETTINGS_PROBE PASS 24/24`,
+`PRIVACY_PROBE PASS 31/31`, `SAFE_AREA PASS 23/23` (both shapes),
+`MOTION_PROBE PASS 16/16`, `EXPORT_PROBE PASS 25/25` (2026-09-16).**

@@ -80,7 +80,7 @@ const CHUNKS_PER_PANEL := 12
 ## tapping the same spot over and over was the user's second note: "make it 3
 ## clicks per section in three different spots". Each spot cracks its own third
 ## of the slab and the panel lets go when all three are done.
-const SPOTS_PER_PANEL := 3
+static var SPOTS_PER_PANEL := 3
 ## How many boxes one crack is drawn with. A crack in concrete does not run
 ## straight - it steps left and right round the aggregate - so every crack in this
 ## file is a ZIGZAG of this many short segments, revealed one at a time as the
@@ -198,8 +198,16 @@ const TIE := Color(0.16, 0.16, 0.17)
 ## Four bars up the drive, eight across it, on chairs, tied where they cross.
 ## Sparser than a real 45 cm grid on purpose: twelve taps is a phase, forty is a
 ## chore, and a four-year-old cannot see a 16 mm bar from a metre away anyway.
-const BARS_ALONG := 4
-const BARS_ACROSS := 8
+static var BARS_ALONG := 4
+static var BARS_ACROSS := 8
+## Saw-cut joints across the finished slab; bays are joints + 1. How many groups
+## the form boards are worked in. Stakes to a LONG board and to a SHORT one.
+## All five come from the job's `SlabSpec` (6.5): a three-metre flag and a
+## nine-metre drive disagree about every one of them.
+static var JOINTS := 2
+static var FORM_GROUPS := 3
+static var STAKES_PER_LONG := 4
+static var STAKES_PER_SHORT := 2
 const BAR_T := 0.020
 ## How far a bar stops short of the form, either end (the cover).
 const BAR_COVER := 0.16
@@ -808,7 +816,7 @@ func _build_forms() -> void:
 	# on the gap between them; a pair along a board fits one close picture.
 	var spacing := [LENGTH * 0.245, LENGTH * 0.245, WIDTH * 0.30, WIDTH * 0.30]
 	# None on the expansion strip.
-	var count := [4, 4, 2, 0]
+	var count := [STAKES_PER_LONG, STAKES_PER_LONG, STAKES_PER_SHORT, 0]
 	for i in range(_forms.size()):
 		var base: Vector3 = _forms[i]["home"] + out[i]
 		var n: int = count[i]
@@ -2158,7 +2166,7 @@ func form_group(i: int) -> int:
 
 
 func form_group_count() -> int:
-	return 3
+	return FORM_GROUPS
 
 
 ## Is board `i` one the job can take now? The KERB board is not, until the base
@@ -3421,7 +3429,7 @@ func struck_count() -> int:
 ## a slab this long needs them or it cracks where it likes instead of where the
 ## joint is. That IS the lesson of the phase.
 func joint_count() -> int:
-	return 2
+	return JOINTS
 
 
 ## How far joint `i` has been cut, 0..1.

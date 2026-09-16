@@ -388,6 +388,13 @@ cells_x = 6
 cells_z = 12
 panels_x = 2
 panels_z = 2
+joints = 2
+bars_along = 4
+bars_across = 8
+stakes_per_long = 4
+stakes_per_short = 2
+form_groups = 3
+spots_per_panel = 3
 
 [resource]
 script = ExtResource("1_def")

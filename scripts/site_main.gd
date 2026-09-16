@@ -914,6 +914,11 @@ func args_shot_is(shot_name: String) -> bool:
 	return String(args.get("shot", "")) == shot_name
 
 
+## The last `--stage` this job could not answer, or "". A harness reads it to
+## refuse a frame rather than take a picture of the wrong beat.
+var stage_missed: String = ""
+
+
 ## The step a `--stage` poses, looked up by its verb (`STAGE_STEP`): the job's
 ## step count for `done` and `parked`, 0 for a stage nobody named.
 func stage_step(stage: String) -> int:
@@ -922,7 +927,18 @@ func stage_step(stage: String) -> int:
 	var want: Array = STAGE_STEP[stage]
 	if String(want[0]) == "":
 		return job.steps.size()
-	return maxi(job.index_of(String(want[0]), int(want[1])), 0)
+	var at := job.index_of(String(want[0]), int(want[1]))
+	if at < 0:
+		# A verb THIS job has not got. Clamping to 0 poses the first row instead,
+		# silently - so `--stage=tipped` against a job with no plate compactor
+		# would take a critic frame of the first bite and call it the base being
+		# packed. `STAGE_STEP` is the driveway's table; every later job needs its
+		# own, and until then a stage it cannot answer says so out loud.
+		push_warning("SiteMain.stage_step: job '%s' has no '%s' row for --stage=%s; posing row 0"
+			% [_job_file, String(want[0]), stage])
+		stage_missed = stage
+		return 0
+	return at
 
 
 ## A `--step` argument: a number, a verb (`pour_chute`), or a verb and which of

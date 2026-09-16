@@ -1037,3 +1037,36 @@ the contract:
   `new_driveway`, `SiteMain.resume` refused any other job's document, `_mode`
   fell to "fresh" and the save was cleared - so the first child to save a second
   job would have lost it on the next launch, with nothing on the screen touched.
+
+### 7j. The shape counts, and one save per job (2026-09-16)
+
+- **Seven COUNTS moved into `SlabSpec`**: `joints`, `bars_along`,
+  `bars_across`, `stakes_per_long`, `stakes_per_short`, `form_groups`,
+  `spots_per_panel`. Each was a literal in `Driveway` - `joint_count()`
+  returning a hard 2, a `count := [4, 4, 2, 0]` list - and each is a number a
+  three-metre flag and a nine-metre drive disagree about. They are DATA and not
+  arithmetic off the rectangle on purpose: four stakes to a board and twelve
+  bites are pacing decisions the critic rounds argued about ("twelve taps is a
+  phase, forty is a chore"), and a formula would quietly overrule them.
+- **What did NOT move, and why:** the SHAPE of the form list. A driveway is two
+  long boards, a kerb board and an expansion strip against the garage; a flag is
+  two boards with the kerb face and a neighbouring flag for its other sides.
+  That is a different structure, not a different number, and inventing the
+  abstraction with only one case to check it against is how the wrong
+  abstraction gets built. It waits for the flag.
+- **Proved live, not assumed:** the defaults are the driveway's numbers, so the
+  suite passes whether the fields are read or dead. Given a flag's counts the
+  same slab built bays 3 -> 2, bars 12 -> 5, stakes 10 -> 5, groups 3 -> 1,
+  bites 3 -> 2 a panel; then it was put back.
+- **`stage_step` no longer poses row 0 in silence.** A `--stage` naming a verb
+  the loaded job has not got used to clamp to the first row, so a critic frame
+  of `--stage=tipped` against a job with no plate compactor would have shown the
+  first bite and called it the base being packed. It warns and records
+  `stage_missed` now. `STAGE_STEP` is still the driveway's own table; every
+  later job needs its own.
+- **ONE SAVE PER JOB** (decision 8, answered by the user 2026-09-16). Each seat
+  on the title row remembers its own half-finished job, so no child loses work
+  by pressing the wrong disc, and the corner disc throws away only the job being
+  looked at. The store becomes `version` 2 with a `jobs` map keyed by job name;
+  the current single-job document migrates into it. Not built yet - it is the
+  next session's first work, deliberately before any flag data exists to need it.

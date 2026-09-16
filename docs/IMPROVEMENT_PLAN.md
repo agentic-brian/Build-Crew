@@ -1035,6 +1035,18 @@ Garage): the CREW is the child. Nothing is left open.
 6. **The plate compactor** (5.1) - a new machine phase and the largest
    single addition here.
 7. **The name:** Build Crew or Build Site.
+   **Closed 2026-09-16: Build Crew.**
+8. **One save file, or one per job?** (6.5, raised by the survey.) With two
+   seats a child can have one unfinished job, and starting the other overwrites
+   it on the first beat - silently, with no hold and nothing on screen, in a
+   game whose corner disc puts "throw a drive away" behind a 0.9 s hold.
+   **Closed 2026-09-16: A SAVE PER JOB.** Each disc remembers its own
+   half-finished job, so no child ever loses work by pressing the wrong disc.
+   The store becomes one slot per job name (`version` 2, a `jobs` map), each
+   seat shows its own carry-on state, and the orange corner disc throws away
+   only the job being looked at. Costs a format bump and a migration of the
+   current single-job save; that is the next session's first work, before any
+   flag data exists to need it.
 
 ---
 
