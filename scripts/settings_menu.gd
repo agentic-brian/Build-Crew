@@ -695,23 +695,26 @@ func _release_pointers() -> void:
 	var p := get_parent()
 	if p == null:
 		return
+	# The HUD is a SIBLING only in the job. On the title row the panel's parent is
+	# `Title`, whose HUD (if any) lives inside the lot it instances - so a missing
+	# sibling must skip this block, never return: the title's own held control is
+	# let go at the end of this function, and returning here made that dead code.
 	var hud := p.get_node_or_null("HUD")
-	if hud == null:
-		return
-	if hud.has_method("release_pads"):
-		hud.call("release_pads")
-	elif "_pads" in hud:
-		var pads: Dictionary = hud.get("_pads")
-		for pad in pads.values():
-			if pad != null and pad.has_method("release_all"):
-				pad.call("release_all")
-	if hud.has_method("cord"):
-		var cord: Object = hud.call("cord")
-		if cord != null:
-			if cord.has_method("release_grab"):
-				cord.call("release_grab")
-			elif "_grabbing" in cord:
-				cord.set("_grabbing", false)
+	if hud != null:
+		if hud.has_method("release_pads"):
+			hud.call("release_pads")
+		elif "_pads" in hud:
+			var pads: Dictionary = hud.get("_pads")
+			for pad in pads.values():
+				if pad != null and pad.has_method("release_all"):
+					pad.call("release_all")
+		if hud.has_method("cord"):
+			var cord: Object = hud.call("cord")
+			if cord != null:
+				if cord.has_method("release_grab"):
+					cord.call("release_grab")
+				elif "_grabbing" in cord:
+					cord.set("_grabbing", false)
 	# And the title row's own HELD control. A paused tree never delivers the
 	# RELEASE, so a finger lifted off the "new drive" disc while this panel is up
 	# would still be held when it closes - and the ring would fill to the end and
@@ -741,6 +744,16 @@ func _set_panel_takes_input(on: bool) -> void:
 	_panel.mouse_filter = f
 	if _dim != null:
 		_dim.mouse_filter = f
+	# A parent set to IGNORE does not stop its CHILDREN being picked, and Godot
+	# picks on `is_visible_in_tree()`, never on modulate - so through both fades
+	# the tick, the quaver, the slider and the link went on answering fingers
+	# over a game that was already running again. A second tap on a ghost tick
+	# was answered by nothing at all, and a tap that found the link in that
+	# window raised the grown-up's sum behind the fade, where it waited for the
+	# next child who pressed the cog.
+	for c: Control in [_done_btn, _music_btn, _privacy_btn, _slider, _gate]:
+		if c != null:
+			c.mouse_filter = f
 
 
 ## Tree Crew types this `-> StartMenu`; duck-typed here to plain `Node` because

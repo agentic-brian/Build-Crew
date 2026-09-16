@@ -145,11 +145,18 @@ func _resume_row(job: JobDef, i: int, nth: int, done: int) -> void:
 			_check(main.drive.fill_fraction() < 0.05, "%s: the pour starts again from an empty form (%.3f)" % [tag, main.drive.fill_fraction()])
 		"rake_pull":
 			_check(main.sfx.is_looping("mixer") and main.sfx.is_looping("concrete"), "%s: the drum and the chute running" % tag)
-		"jack_spot", "stake_drive":
+		"jack_spot":
 			if done > 0:
 				var t2 := main.tool_node(s.tool)
 				_check(t2 != null and t2.global_position.distance_to(SiteMain.TOOL_REST[s.tool]) > 1.0,
 					"%s: mid-row the %s stands over the work, not on the lawn" % [tag, s.tool])
+		"stake_drive":
+			# No `done > 0` here. The sledge is wound up over the next peg from
+			# the moment the row OPENS, not just mid-row (2026-09-16): a resumed
+			# row at done 0 must show the hammer up, the same as a fresh one.
+			var t3 := main.tool_node(s.tool)
+			_check(t3 != null and t3.global_position.distance_to(SiteMain.TOOL_REST[s.tool]) > 1.0,
+				"%s: the sledge waits over the work at every done, never on the lawn" % tag)
 		"form_strip":
 			_check(main.garage_door_k() < 0.05, "%s: the garage shut for the evening" % tag)
 			var cones := main._cone_posts()

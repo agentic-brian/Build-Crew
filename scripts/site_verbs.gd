@@ -136,7 +136,7 @@ func _hold(runner: JobRunner, seconds: float, config: SiteConfig, loop_group: St
 	# switch, bit for bit.
 	var rate := 0.0
 	while k < 1.0:
-		var dt := runner.get_process_delta_time()
+		var dt := _dt(runner)
 		if runner.held and not was_held:
 			burst_left = config.hold_burst
 		was_held = runner.held
@@ -189,7 +189,7 @@ func _bite(runner: JobRunner, seconds: float, config: SiteConfig, loop_group: St
 	var t := 0.0
 	var total := maxf(seconds, 0.05)
 	while t < total:
-		t = minf(t + runner.get_process_delta_time(), total)
+		t = minf(t + _dt(runner), total)
 		var k := t / total
 		on_k.call(k)
 		runner.partial(k)
@@ -220,7 +220,7 @@ func _scrub(runner: JobRunner, config: SiteConfig, loop_group: String,
 	# the far form).
 	var want_done: float = done if done > 0.0 else config.scrub_done
 	while float(coverage.call()) < want_done:
-		var dt := runner.get_process_delta_time()
+		var dt := _dt(runner)
 		if each_frame.is_valid():
 			each_frame.call(dt)
 		# The finger is dropped onto the plane the work is ON: the slab's top, or
@@ -259,11 +259,34 @@ func _scrub(runner: JobRunner, config: SiteConfig, loop_group: String,
 ## Eases a value 0..1 over `seconds`, calling `on_k` every frame: a machine move
 ## that is not the child's work. `smooth` false hands over a LINEAR k, for a
 ## caller that shapes its own motion (a bar that falls rather than settles).
+## One frame of a verb's own clock, in seconds - and 0.0 while the tree is paused.
+##
+## Every verb animates inside `while ...: await runner.get_tree().process_frame`,
+## and `process_frame` is emitted whether or not the tree is paused: `paused`
+## stops `_process`, not a coroutine. So the settings panel (6.4) froze the
+## picture, the HUD and the cameras while the POUR went on pouring behind it -
+## unsteered, into whichever cell the chute last sat over - drove the bar up
+## behind the dim, wrote the save mid-pause, and handed the parent back a phase
+## the child never did.
+##
+## A zero delta is the whole fix: every loop stays alive and exactly where it
+## was, so there is nothing to unwind and nothing to restore when the panel
+## closes. (`create_timer(..., false)` already waits out a pause, which is why
+## the waits between beats never had this bug.)
+func _dt(runner: JobRunner) -> float:
+	if runner == null:
+		return 0.0
+	var tree := runner.get_tree()
+	if tree == null or tree.paused:
+		return 0.0
+	return runner.get_process_delta_time()
+
+
 func _ease(runner: JobRunner, seconds: float, on_k: Callable, smooth: bool = true) -> void:
 	var t := 0.0
 	var total := maxf(seconds, 0.02)
 	while t < total:
-		var dt := runner.get_process_delta_time()
+		var dt := _dt(runner)
 		t = minf(t + dt, total)
 		var k := t / total
 		on_k.call(k * k * (3.0 - 2.0 * k) if smooth else k)
@@ -395,9 +418,17 @@ func push_rubble(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 			Vector3(x, 0.0, Driveway.Z_KERB - 0.4), start], config.reverse_time, false, 1.5)
 		machine.spin_to(0.0, config.spin_time * 1.6)
 		await machine.arrived
-	# Blade down on the dirt, and go.
-	await _ease(runner, config.bucket_dump_time, func(k: float) -> void:
-		machine.set_bucket(1.0 - k, 0.0))
+	# Blade down on the dirt, and go - FROM WHERE IT IS. The end of a pass already
+	# lines the machine up on the next lane and puts the blade DOWN (below), so a
+	# lower that always started at "carried high" snapped the arm up 25 degrees
+	# on the first frame of the second push and then spent `bucket_dump_time`
+	# putting it back, with the machine standing still in the garage. Already
+	# down: nothing to lower, and the crawl starts under the finger.
+	var lift0 := machine.bucket_lift()
+	var curl0 := machine.bucket_curl()
+	if lift0 > 0.01 or curl0 > 0.01:
+		await _ease(runner, config.bucket_dump_time, func(k: float) -> void:
+			machine.set_bucket(lerpf(lift0, 0.0, k), lerpf(curl0, 0.0, k)))
 	site.sfx.play_loop(SOUND_IDLE, "skid")
 	var from := machine.global_position.z
 	var to := finish.z
@@ -523,34 +554,34 @@ func stake_drive(runner: JobRunner, subject: Node3D, targets: Array[Node3D],
 		i = open[0]
 	# (The pegs stand waiting from the moment their row opens: `arm_rings`.)
 	var head: Vector3 = drive.stake_home(i)
-	# The top of the painted cap before the blow: where the sledge's face rests,
-	# lifts off and comes back down (4.2).
-	var top0: float = drive.stake_cap(i).y + Driveway.STAKE_CAP * 0.5
 	var sledge := tool as HandTool
 	var struck := [false]
-	if sledge != null:
-		sledge.hover(Vector3(head.x, top0 + config.sledge_lift, head.z), Vector3.DOWN, Vector3.FORWARD)
-		await runner.get_tree().create_timer(config.tool_fly_time * 0.6, false).timeout
+	# The hammer is ALREADY UP over a peg of this pair - `arm_rings` stood it
+	# there when the row opened, which is what says "hit this one" - so in the
+	# common case there is nothing to do here and the swing starts in the frame
+	# the finger lands. It used to `hover` in from the lawn and then sleep 0.33 s
+	# on EVERY tap, so the child's press was answered by a tool arriving and the
+	# blow landed 0.6 s late. If they took the OTHER peg of the pair, the head is
+	# carried across AT THE TOP of its swing, which is what a person with a
+	# sledge does, and still half the old wait.
+	if sledge != null and not site.sledge_over(sledge, i):
+		site.hold_sledge(sledge, i, 1.0, config.tool_fly_time * 0.5)
+		await runner.get_tree().create_timer(config.tool_fly_time * 0.5, false).timeout
+	var strike: float = clampf(config.sledge_strike, 0.05, 0.9)
 	await _bite(runner, config.stake_time, config, "", func(k: float) -> void:
 		# The stake moves FIRST in the frame, so the face below reads the cap
 		# where it is now.
-		drive.set_stake(i, clampf((k - 0.45) / 0.4, 0.0, 1.0))
-		# Wound up over the cap, then a fast, accelerating fall onto its top at
-		# the strike, then riding the cap down as the peg goes in. The face used
-		# to sink 25 cm INTO the proud peg, jump back up at the strike and trail
-		# above a peg that moved first - invisible on a grey peg, and the pink
-		# cap made it the plainest thing in the STAKE frame (4.2).
-		var face: float
-		if k < 0.20:
-			face = top0 + config.sledge_lift
-		elif k < 0.45:
-			var u: float = (k - 0.20) / 0.25
-			face = top0 + config.sledge_lift * (1.0 - u * u)
-		else:
-			face = drive.stake_cap(i).y + Driveway.STAKE_CAP * 0.5
+		drive.set_stake(i, clampf((k - strike) / maxf(0.85 - strike, 0.05), 0.0, 1.0))
+		# The SWING: down from the wind-up it was already waiting at, on the
+		# handle's own arc, accelerating into the cap at `sledge_strike`. Past
+		# the strike `hold_sledge` reads the cap live, so the face rides the peg
+		# down for free. It used to be a straight vertical translate with a fixed
+		# basis - a lowering, not a swing - and the wind-up happened AFTER the
+		# tap ("more like a swing of a sledge hammer", 2026-09-16).
 		if sledge != null:
-			sledge.hover_instant(Vector3(head.x, face, head.z), Vector3.DOWN, Vector3.FORWARD)
-		if k >= 0.45 and not struck[0]:
+			var u := clampf(k / strike, 0.0, 1.0)
+			site.hold_sledge(sledge, i, 1.0 - u * u, 0.0)
+		if k >= strike and not struck[0]:
 			struck[0] = true
 			site.sfx.play_group(SOUND_STAKE)
 			site.shake(config.shake_stake)
@@ -691,7 +722,7 @@ func dump_leave(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	var waited := 0.0
 	while truck != null and truck.visible and waited < 6.0 \
 			and truck.global_position.z - truck.rear_overhang() < Driveway.Z_KERB + 0.6:
-		waited += runner.get_process_delta_time()
+		waited += _dt(runner)
 		await runner.get_tree().process_frame
 
 
@@ -860,7 +891,7 @@ func pour_chute(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	# a side pad.
 	site.set_pour_view(z - reach, 1.0)
 	while drive.band_fraction(band_from) < config.band_done:
-		var dt := runner.get_process_delta_time()
+		var dt := _dt(runner)
 		var moved := false
 		if site.pad_held("left"):
 			swing -= config.chute_swing_rate * dt
@@ -1300,9 +1331,14 @@ func compact_base(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	if drive == null or site == null:
 		return
 	var plate := tool as HandTool
-	var bay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
-	var band := drive.bay_range(bay)
-	var at := [site.plate_at(bay)]
+	# ONE beat over the WHOLE base, ended by a CLOCK and not by coverage (the
+	# playtest of 2026-09-16: the child could not get past this phase). Bay 0
+	# means "anywhere between the apron and the kerb" to `clamp_plate` and
+	# `plate_at`; `secs` counts only the frames the plate is really working.
+	var bay := 0
+	var at := [site.plate_at(0)]
+	var secs := [0.0]
+	site.pack_worked = 0.0
 	var grab := [false]
 	# Where the finger took hold relative to the plate: a finger on the orange
 	# cowl lands a metre behind the plate on the base, and without the offset a
@@ -1334,7 +1370,10 @@ func compact_base(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 		var d := want - here
 		d.y = 0.0
 		at[0] = here + d.limit_length(config.plate_speed * dt)
-		drive.paint_pack(at[0], config.plate_radius, config.pack_rate * dt, band.x, band.y)
+		# No band: it packs wherever the child takes it.
+		drive.paint_pack(at[0], config.plate_radius, config.pack_rate * dt)
+		secs[0] += dt
+		site.pack_worked = secs[0]
 		site.shake_floor(config.shake_plate_floor)
 		site.hold_plate(plate, at[0], bay, true)
 		return true
@@ -1351,30 +1390,25 @@ func compact_base(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 		if not runner.held or site.drag_is_world():
 			site.ease_plate_view(at[0], dt)
 		site.hold_plate(plate, at[0], bay, false)
+	# The gate is TIME, not coverage. `_scrub` still does everything else it does
+	# - counts only working frames, fills the bar through `runner.partial`, hangs
+	# the white mime after `chute_hint_delay` of nothing happening - it just asks
+	# a clock how far along the child is instead of asking the ground.
 	await _scrub(runner, config, SOUND_PLATE, work,
-		func() -> float: return drive.pack_coverage_in(band.x, band.y),
-		hint, "plate", each, -1.0, Driveway.BASE_TOP)
+		func() -> float: return secs[0] / maxf(config.pack_seconds, 0.5),
+		hint, "plate", each, 1.0, Driveway.BASE_TOP)
 	site.shake_floor(0.0)
 	site.hold_plate(plate, at[0], bay, false)
-	# The bay's last patches go down as the plate leaves it (the plan's 1.6).
+	# Everything the child did not reach goes down WITH what they did, as the
+	# plate lifts (the plan's 1.6). The whole base settles, so the phase ends on
+	# ground that is visibly, wholly packed - not on a switch being thrown.
 	await _ease(runner, config.pack_finish_time, func(k: float) -> void:
-		drive.finish_pack_bay(bay, k))
-	if bay < drive.bay_count():
-		# Walked just over into the next bay at a person's pace, the eye walking
-		# after it, so the next press finds it in the next picture: never carried
-		# across the lawn, never driven at the camera.
-		var from2: Vector3 = at[0]
-		var to2: Vector3 = drive.clamp_plate(from2, bay + 1)
-		var walk: float = maxf(0.4, from2.distance_to(to2) / maxf(config.plate_speed, 0.1))
-		await _ease(runner, walk, func(k: float) -> void:
-			var p: Vector3 = from2.lerp(to2, k)
-			site.ease_plate_view(p, runner.get_process_delta_time())
-			site.hold_plate(plate, p, bay + 1, false))
-	else:
-		# Done. It goes back to the grass with the rest of the kit in the phase's
-		# hold (`SiteMain.phase_done`), upright and whole - never faded out in the
-		# held picture (the verification pass).
-		site.drag_tool_at = Vector3.INF
+		for b in range(1, drive.bay_count() + 1):
+			drive.finish_pack_bay(b, k))
+	# Done. It goes back to the grass with the rest of the kit in the phase's
+	# hold (`SiteMain.phase_done`), upright and whole - never faded out in the
+	# held picture (the verification pass).
+	site.drag_tool_at = Vector3.INF
 
 
 # --- The end of the job: the cure and the strip -----------------------------------------------

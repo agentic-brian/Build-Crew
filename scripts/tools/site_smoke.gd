@@ -958,6 +958,22 @@ func _phase_forms() -> void:
 	_check(capped_rings == ring_open.size() and capped_rings >= 2,
 		"the pair's pegs stand waiting before the first blow, a ring on each painted cap (%d of %d)"
 		% [capped_rings, ring_open.size()])
+	# And the SLEDGE is already wound up over the first of them, before a finger
+	# has touched anything: the raised hammer is what says "hit this one"
+	# (2026-09-16). It used to lie on the lawn until the tap and then fly in, so
+	# the tap was answered by a tool arriving instead of by a blow - while every
+	# posed screenshot showed it up, which is how the drift went unnoticed.
+	var sledge_w := main.tool_node("sledge") as HandTool
+	var peg_w: int = ring_open[0] if not ring_open.is_empty() else 1
+	var cap_w := drive.stake_cap(peg_w).y + Driveway.STAKE_CAP * 0.5
+	var home_w := drive.stake_home(peg_w)
+	var rise_w := sledge_w.global_position.y - cap_w if sledge_w != null else -1.0
+	var over_w := Vector2(sledge_w.global_position.x - home_w.x,
+		sledge_w.global_position.z - home_w.z).length() if sledge_w != null else 99.0
+	_check(sledge_w != null and sledge_w.visible and rise_w > main.config.sledge_lift * 0.5 and over_w < 0.9,
+		"and the sledge WAITS wound up over the first of them (%.2f m up, %.2f m of it)" % [rise_w, over_w])
+	_check(sledge_w != null and sledge_w.global_position.distance_to(SiteMain.TOOL_REST["sledge"]) > 1.0,
+		"off the lawn before the tap, not flown in after it")
 	var heads: Array[Vector3] = rings.points().duplicate()
 	var same := 0
 	for i in range(heads.size()):
@@ -992,22 +1008,38 @@ func _phase_forms() -> void:
 			# And the sledge's face never goes INSIDE the cap it hits: it used to
 			# sink 25 cm into the proud peg before the strike (4.2). Measured only
 			# while the head is over this stake, not on its flight in.
-			var sledge_t := main.tool_node("sledge")
+			var sledge_t := main.tool_node("sledge") as HandTool
 			var sh := drive.stake_home(i)
 			var deepest := INF
 			var over := 0
+			# It SWINGS now, so the head travels along the board as well as down:
+			# a 2 cm window would have measured only the ride-down after the
+			# strike and called it a landing. Anything within a swing's reach of
+			# the peg counts, and the face must never be inside the cap in ANY
+			# of those frames.
+			var hi_y := -INF
+			var lo_y := INF
+			var turned := 0.0
+			var b_first := sledge_t.global_basis.z if sledge_t != null else Vector3.ZERO
 			while runner.is_busy():
 				peak = maxf(peak, maxf(absf(main.camera.h_offset), absf(main.camera.v_offset)))
 				if sledge_t != null:
 					var fp := sledge_t.global_position
-					if Vector2(fp.x - sh.x, fp.z - sh.z).length() < 0.02:
+					hi_y = maxf(hi_y, fp.y)
+					lo_y = minf(lo_y, fp.y)
+					turned = maxf(turned, (sledge_t.global_basis.z - b_first).length())
+					if Vector2(fp.x - sh.x, fp.z - sh.z).length() < 0.9:
 						over += 1
 						deepest = minf(deepest, fp.y - (drive.stake_cap(i).y + Driveway.STAKE_CAP * 0.5))
 				await get_tree().process_frame
+			_check(hi_y - lo_y > main.config.sledge_lift * 0.5,
+				"the head really travels down onto the peg (%.0f cm)" % ((hi_y - lo_y) * 100.0))
+			_check(turned > 0.05,
+				"and it SWINGS on its handle - the tool turns, it is not lowered flat (%.3f)" % turned)
 			print("      sledge blow: camera peak offset %.1f mm" % (peak * 1000.0))
 			_check(peak >= 0.008, "the sledge blow kicks the picture (%.1f mm)" % (peak * 1000.0))
 			_check(over > 3 and deepest >= -0.005,
-				"and the sledge's face lands ON the cap, never inside the peg (%d frames over it, deepest %.3f m)"
+				"and its face lands ON the cap, never inside the peg (%d frames over it, deepest %.3f m)"
 				% [over, deepest])
 			await get_tree().create_timer(0.6).timeout
 			_check(absf(main.camera.h_offset) < 0.0005 and absf(main.camera.v_offset) < 0.0005,
@@ -1225,7 +1257,21 @@ func _phase_compact() -> void:
 		"and the tipper's body is off the pad before the plate starts")
 	_check(runner.current_step().shot == CameraRig.PLATE and runner.waiting_for_hold(),
 		"the plate is held on its own low shot")
-	_check(runner.current_step().count == drive.bay_count(), "one beat per bay of base (%d)" % runner.current_step().count)
+	# ONE beat over the whole base, ended by a clock, since the playtest of
+	# 2026-09-16 ("it doesn't matter where you compact you just have to compact
+	# for a few seconds"). The bar must not move: three beats of weight 2 became
+	# one of weight 6, so the job still totals 83 stops over 25 rows.
+	_check(runner.current_step().count == 1 and runner.current_step().progress_weight == 6,
+		"one beat over the WHOLE base, worth the same six stops (count %d, weight %d)"
+		% [runner.current_step().count, runner.current_step().progress_weight])
+	# This suite spends seconds of the child's own clock on its assertions (a
+	# finger held still, a real finger on the cowl) before it ever walks the
+	# plate, so the budget is widened for the phase and put back after. The
+	# SHIPPED default is asserted separately, below.
+	var pack_default := main.config.pack_seconds
+	_check(pack_default >= 5.0 and pack_default <= 6.0,
+		"the base is packed by a CLOCK a child can keep: %.1f s of work, anywhere on it" % pack_default)
+	main.config.pack_seconds = 9.0
 	var plate := main.tool_node("plate")
 	_check(plate != null and plate.model_loaded and plate.missing_nodes.is_empty(),
 		"the plate compactor is the built GLB with its Body, Head, Grip and Tip (%s)"
@@ -1385,29 +1431,29 @@ func _phase_compact() -> void:
 	_check(not main._press(far, true) and int(main.sfx.played_count.get("pop", 0)) > heard_n,
 		"a press on the base away from the plate is a miss, heard")
 	main._press(far, false)
-	for b in range(1, drive.bay_count() + 1):
-		var band := drive.bay_range(b)
-		var t_bay := Time.get_ticks_msec()
-		var walked := await _walk_plate(b)
-		_check(walked, "walking the plate over bay %d packs it (%.2f)" % [b, drive.pack_coverage_in(band.x, band.y)])
-		await _until(func() -> bool: return runner.done_in_step >= b or runner.current_step().verb != "compact_base",
-			"bay %d ends" % b)
-		runner.hold(false)
-		await get_tree().create_timer(main.config.pack_finish_time + 0.1).timeout
-		_check(drive.pack_coverage_in(band.x, band.y) >= 0.999,
-			"bay %d finishes itself packed (%.3f, %.1f s)" % [b, drive.pack_coverage_in(band.x, band.y),
-				float(Time.get_ticks_msec() - t_bay) / 1000.0])
-		if b < drive.bay_count():
-			var nb := drive.bay_range(b + 1)
-			_check(drive.pack_coverage_in(nb.x, nb.y) < 0.05, "and bay %d is still loose (%.2f)" % [b + 1, drive.pack_coverage_in(nb.x, nb.y)])
-			await _settled()
-			var eye := main.camera.global_position
-			var grip_b := grip != null and (main.camera.is_position_behind(_grip_point(grip)) \
-				or main.camera.unproject_position(_grip_point(grip)).y > frame.y)
-			_check(eye.z > plate.global_position.z + 1.0 and _on_screen(plate.global_position) and grip_b \
-				and plate.global_position.z >= nb.x and plate.global_position.z <= nb.y,
-				"the plate waits in bay %d, the eye behind it and its handle off the bottom of the picture (eye z %.1f, plate z %.1f)"
-				% [b + 1, eye.z, plate.global_position.z])
+	# One run, anywhere, for `pack_seconds` of real work - the child's own path,
+	# not a boustrophedon. The smoke walks a single lane up the middle, which
+	# under the OLD coverage rule could never have finished a bay, let alone
+	# three: that is the point of the change.
+	var t_pack := Time.get_ticks_msec()
+	var lane_ok := await _walk_plate(0)
+	_check(lane_ok, "running the plate up ONE lane finishes the phase (%.2f of the base packed on the way)"
+		% drive.pack_coverage())
+	await _until(func() -> bool: return runner.done_in_step >= 1 or runner.current_step().verb != "compact_base",
+		"the base is packed")
+	# Measured off the verb's OWN clock, not the wall: everything this suite did
+	# on the plate before the walk counts, and none of the frames it spent
+	# elsewhere do. That is the whole promise - seconds of WORK, not coverage.
+	var worked: float = main.pack_worked
+	_check(worked >= main.config.pack_seconds * 0.95 and worked <= main.config.pack_seconds + 0.5,
+		"and it ended on its clock, at %.1f s of the %.1f s it asks for (wall %.1f s)"
+		% [worked, main.config.pack_seconds, float(Time.get_ticks_msec() - t_pack) / 1000.0])
+	main.config.pack_seconds = pack_default
+	runner.hold(false)
+	await get_tree().create_timer(main.config.pack_finish_time + 0.2).timeout
+	_check(drive.pack_coverage() >= 0.999,
+		"every bay the child never reached goes down with the one they did (%.3f)" % drive.pack_coverage())
+	_check(drive.stones_flat(), "and every stone on the base is lying flat")
 	# From the last bay's end until the plate is put away: never see-through, and
 	# gone only once it is back on the grass (the verification pass: it faded out
 	# in the held picture).
@@ -1461,10 +1507,12 @@ func _grip_point(grip: Node3D) -> Vector3:
 ## Walks the plate over one bay the way a finger does: the cursor always a
 ## hand's width ahead of the plate toward the next point of a serpentine over
 ## the bay, the finger down, until the bay's beat ends.
+## Walks the plate over bay `b`, or - with `b = 0` - up ONE lane of the whole
+## base and back, which is all the child is asked for now.
 func _walk_plate(b: int) -> bool:
-	var band := drive.bay_range(b)
+	var band := Vector2(Driveway.Z_APRON, Driveway.Z_KERB) if b <= 0 else drive.bay_range(b)
 	var pts: Array[Vector3] = []
-	var xs := [Driveway.CENTRE_X - 1.25, Driveway.CENTRE_X - 0.4, Driveway.CENTRE_X + 0.4, Driveway.CENTRE_X + 1.25]
+	var xs := [Driveway.CENTRE_X] if b <= 0 		else [Driveway.CENTRE_X - 1.25, Driveway.CENTRE_X - 0.4, Driveway.CENTRE_X + 0.4, Driveway.CENTRE_X + 1.25]
 	for li in range(xs.size()):
 		var za := band.x + 0.3
 		var zb := band.y - 0.3
@@ -1472,7 +1520,7 @@ func _walk_plate(b: int) -> bool:
 		pts.append(Vector3(xs[li], Driveway.BASE_TOP, zb if li % 2 == 0 else za))
 	var at := 0
 	for frame in range(FRAME_CAP):
-		if runner.done_in_step >= b or runner.current_step() == null or runner.current_step().verb != "compact_base":
+		if runner.done_in_step >= maxi(b, 1) or runner.current_step() == null 				or runner.current_step().verb != "compact_base":
 			return true
 		var plate_p := main.drag_tool_at
 		if plate_p == Vector3.INF:
@@ -2254,6 +2302,8 @@ func _phase_finishing() -> void:
 	var fr_h := main.camera.get_viewport().get_visible_rect().size
 	var joined := 0
 	var off_bottom := 0
+	var water_pts := 0
+	var water_on_screen := 0
 	var crossings := 0
 	var aims: Array[Vector3] = [Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.5),
 		Vector3(4.1, Driveway.GRADE, 4.3), Vector3(1.0, Driveway.GRADE, 4.1)]
@@ -2281,10 +2331,31 @@ func _phase_finishing() -> void:
 		var last := pts[pts.size() - 1]
 		if not main.camera.is_position_behind(last) and main.camera.unproject_position(last).y > fr_h.y + 8.0:
 			off_bottom += 1
-		crossings += _screen_crossings(pts, hose_t.jet_points())
+		# The water's own line, ballistic now that the solid rod down the middle
+		# of the spray is gone (2026-09-16). Counted, because a line that came
+		# back with one point would leave `_screen_crossings` iterating an empty
+		# range - green while measuring nothing.
+		var wl := hose_t.water_line()
+		water_pts = maxi(water_pts, wl.size())
+		for wp in wl:
+			if not main.camera.is_position_behind(wp):
+				var sp := main.camera.unproject_position(wp)
+				if sp.x > 0.0 and sp.x < fr_h.x and sp.y > 0.0 and sp.y < fr_h.y:
+					water_on_screen += 1
+		crossings += _screen_crossings(pts, wl)
 	_check(joined == aims.size(), "the hose runs from the nozzle's own stub at every aim (%d of %d)" % [joined, aims.size()])
 	_check(off_bottom == aims.size(), "and off the bottom of the picture (%d of %d)" % [off_bottom, aims.size()])
+	_check(water_pts >= 6 and water_on_screen >= 2,
+		"the water is drawn as a thrown LINE of drops, in the picture (%d points, %d on screen)"
+		% [water_pts, water_on_screen])
 	_check(crossings == 0, "and never across the water on screen (%d crossings)" % crossings)
+	# The solid rod is GONE: no cylinder is drawn inside the spray.
+	var rods := 0
+	for n in hose_t.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh is CylinderMesh and String(mi.name).begins_with("JetSeg"):
+			rods += 1
+	_check(rods == 0, "and it is SPRAY, not a solid stream: no rod is drawn down the middle of it (%d)" % rods)
 	# ONE finger owns the beat (the improvement plan's 0.3): a second finger
 	# landing and lifting - a palm, a thumb holding the iPad - must neither take
 	# the hose nor end the hold. Through the real input pipeline, with touch

@@ -157,8 +157,10 @@ eye can judge, and not re-derive those.
   clang, two bounces, then the ties pop on down it.
 - Since the plan's fifth session (2026-09-15): a truck stops in the road and
   the child backs it in, beeping only while it moves; the plate compactor is a
-  DRAG per bay, packing a plus sign under a still finger, the packed base a luma
-  step paler with its stones flat; the kerb board and its pegs are live only once
+  DRAG, packing a plus sign under a still finger, the packed base a luma
+  step paler with its stones flat - over the WHOLE base and ended by a clock
+  since the playtest of 2026-09-16, because per-bay coverage was a phase the
+  user could not finish; the kerb board and its pegs are live only once
   the base is packed (state, not a count), and its pegs stand in earth; the cure
   is a beat and the three boards are stripped by the child, carried to a pile on
   the right lawn and carried off at the cut; the tada answers the last board; the word YAY! stays
@@ -176,10 +178,12 @@ eye can judge, and not re-derive those.
   the one control a parent reaches for. It pauses what is under it, lets go of
   every finger that was down, and carries an eleven-step loudness slider, a
   music toggle and a privacy link behind an arithmetic gate. THE WORDS RULE:
-  none for the child, ever; words are allowed only inside a control a child
-  cannot operate (the gate) or on a label addressed to the adult who opened a
-  panel a child has no reason to open (the privacy link) - and the typeface is
-  the signal, Fredoka for the child, Nunito Sans for the adult. Every corner
+  none for the child, ever, except the kept "YAY!" (decision 2, which this
+  bullet does not reopen); beyond it, words are allowed only inside a control a
+  child cannot operate (the gate) or on a label addressed to the adult who
+  opened a panel a child has no reason to open (the privacy link) - and every
+  SENTENCE meant for an adult is set in Nunito Sans, while the gate's sum,
+  answer and keys stay in Fredoka, which is read as digits, not prose. Every corner
   control keeps off the hardware's own insets, and a child whose OS asks for
   less motion gets a camera that never shakes, with everything they touch still
   moving.

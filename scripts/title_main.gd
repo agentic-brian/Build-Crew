@@ -86,6 +86,14 @@ func _ready() -> void:
 ## The lot, idling. Every `dress_*` property is set BEFORE `add_child`:
 ## `_enter_tree` runs on `add_child` and the driveway builds its panels in its
 ## own `_ready`, so a flag set afterwards is a flag that did nothing.
+func _notification(what: int) -> void:
+	# The same reason `SiteMain` has one: an iOS app is suspended, not killed, so
+	# a parent who turned Reduce Motion on while they were away comes back to a
+	# process holding the answer it read at launch. Ask again on the way in.
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_UNPAUSED:
+		Settings.forget_motion()
+
+
 func _place_lot(last: int, pinned: int) -> void:
 	if not ResourceLoader.exists(LEVEL_SCENE):
 		# Never a placeholder box behind a title: an empty sky reads better.

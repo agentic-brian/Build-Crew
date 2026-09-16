@@ -190,7 +190,7 @@ because pressing a button is not a child's work.
 | 7b | back it in | HOLD | `back_dump` | — | `STREET` | 0 |
 | 8 | lay the limestone base | HOLD | `tip_gravel` | — | `TIPPER` | 2 |
 | 9 | it leaves | AUTO | `dump_leave` | — | `WIDE` | 0 |
-| 9a | **pack the base** | DRAG x3 | `compact_base` | plate compactor | `PLATE` | 6 |
+| 9a | **pack the base** | DRAG (a clock) | `compact_base` | plate compactor | `PLATE` | 6 |
 | 9b | close the form: the kerb board | TAP | `form_set` | — | `FORM` | 1 |
 | 9c | and its two pegs | TAP x2 | `stake_drive` | sledge | `STAKE` | 2 |
 | 9d | **the steel** | TAP x12 | `rebar_lay` | — | `BARS` | 12 |
@@ -435,9 +435,13 @@ and the hose and broom's `SURFACE`) came in.
 person doing it stands - 2.6 m up at the kerb end, looking up the drive - and the
 HOSE IS IN THE CHILD'S HANDS. The nozzle rides a fixed arm's length in front of
 the eye (`SiteMain.hand_hold`, `SiteConfig.hose_hold`), down and to the right the
-way a hose is held, and only its AIM follows the finger; the jet is thrown as far
-as the finger is aiming (`HandTool.set_spray_reach`) instead of dribbling out at
-the camera. The broom stays on the slab under the finger - a broom is pushed, not
+way a hose is held, and only its AIM follows the finger; the water is thrown as
+far as the finger is aiming (`HandTool.set_spray_reach`) instead of dribbling out
+at the camera. It is SPRAY and only spray - a fan of drops on their own
+ballistics. There used to be a solid rod of unshaded cylinders drawn down the
+middle of it, and it read as a fire hose; it came out at the playtest of
+2026-09-16 ("I just want the spray"), and the drop count doubled so the fan
+carries the throw by itself. The broom stays on the slab under the finger - a broom is pushed, not
 sprayed - and only the camera comes down.
 
 Not lower than 2.6 m: `work_point` drops the finger onto the slab's plane, and
@@ -652,7 +656,8 @@ the contract:
   sinks it from there. Weeds and step go with the panel.
 - **A form stake is sawn timber with a survey-pink cap** (`STAKE_TIMBER`,
   `STAKE_PINK`, `STAKE_CAP`): the cap is the driven stub, the ring sits on it,
-  and the sledge rests on it, falls onto it and rides it down. Pink is the one
+  and the sledge stands WOUND UP over it from the moment the row opens, swings
+  down onto it on the tap and rides it down. Pink is the one
   hue nothing else on the site has. The pegs stand waiting from the moment the
   phase opens, and are drawn up out of the ground before the boards at the
   payoff.
@@ -706,8 +711,18 @@ word "YAY!". What it adds to the contract:
   and a beat never re-hangs a board already in.
 - **The crossing starts behind the kerb board's trench**, so its pegs stand in
   earth; the cones' cure spot moved out with it (`SiteMain.CONE_MOUTH_OUT`).
-- **The base is packed with a plate compactor** (decision 6): a DRAG, one beat
-  per bay, the eye low behind the plate looking up the drive and walking after
+- **The base is packed with a plate compactor** (decision 6): a DRAG over the
+  WHOLE base, ended by a CLOCK - `SiteConfig.pack_seconds`, about five and a
+  half seconds of real work, anywhere on it, by any path - and then every cell
+  the child never reached goes down with the ones they did, as the plate lifts.
+  It was one beat per bay ended by coverage until the playtest of 2026-09-16,
+  where it stopped the user dead: the plate's footprint is a plus of five cells
+  out of a bay's twenty-four, so `scrub_done` meant visiting seventeen cell
+  centres in each of three bays, and nothing on the screen said so. A phase a
+  competent adult cannot finish is a phase a four-year-old will never finish.
+  Seconds are a promise a three-year-old can keep. Only frames where the finger
+  is really on the plate count, so a rest, a miss or an open settings panel buys
+  nothing. The eye is low behind the plate looking up the drive and walking after
   it only between strokes (`PlateView`). The plate moves only under a finger ON
   it - one rule for the press and the grab (`SiteMain.plate_under`: on the drawn
   machine, or within its half-size plus `tap_reach_m` on the base), held with
@@ -881,14 +896,21 @@ Item 6.4's parts 1, 2, 3, 5 and 7 (part 4, the export presets and icons, is
 what remains; part 6, the name, is answered - **Build Crew**). What they add to
 the contract:
 
-- **THE WORDS RULE, stated once.** For the CHILD: none, ever - the title row,
-  the job and the payoff carry no word at all. Words are allowed in exactly two
-  places, both for the adult: inside a control a child cannot operate (the
-  parental gate's sum and its prose) and on a label addressed to whoever opened
-  a panel a child has no reason to open (the panel's one string, "Privacy
-  Policy"). **The typeface is the signal**: Fredoka is the child's face, Nunito
-  Sans is the adult's. Everything else on the panel is drawn geometry - the cog,
-  the slider, two speakers, ear defenders, a quaver, a green tick - so a
+- **THE WORDS RULE, stated once.** For the CHILD: none, ever, with ONE kept
+  exception - the "YAY!" at the end of the job (decision 2, answered
+  2026-09-15; DESIGN 7d, `site_main.gd`'s `hud.flash`, and a smoke check that
+  pins the string). The title row and the job itself carry no word at all.
+  Beyond that exception, words are allowed in exactly two places, both for the
+  adult: inside a control a child cannot operate (the parental gate's sum and
+  its prose) and on a label addressed to whoever opened a panel a child has no
+  reason to open (the panel's one string, "Privacy Policy"). **The typeface
+  sorts the PROSE**: every sentence an adult is meant to read - the gate's hint,
+  the privacy link - is Nunito Sans, and Fredoka is never made to carry one. It
+  is not a blanket rule about every glyph: the gate's title, its sum, the typed
+  answer and its twelve keys are Fredoka, because they are read as shapes and
+  digits, not as sentences, and at 34 px on an 82 px key the display face is the
+  legible one. Everything else on the panel is drawn geometry - the cog, the
+  slider, two speakers, ear defenders, a quaver, a green tick - so a
   three-year-old can open it, drag it and close it having read nothing.
 - **The settings cog is on BOTH screens**, top-left, 92 px at margin 18 (the
   house button's own size and margin, so it reads as the same family). A

@@ -123,9 +123,17 @@ extends Resource
 @export_range(0.2, 2.0, 0.05) var form_drop_height: float = 0.40
 ## Seconds ONE blow of the sledge takes, which is what puts one stake in. Ten
 ## stakes, ten taps: "one hammer hit per stake".
-@export_range(0.2, 2.0, 0.05) var stake_time: float = 0.60
-## How far the sledge lifts between blows, metres.
-@export_range(0.05, 0.6, 0.01) var sledge_lift: float = 0.26
+@export_range(0.2, 2.0, 0.05) var stake_time: float = 0.70
+## How far the sledge's head rises, metres - the wind-up it WAITS at, held over
+## the peg from the moment the row opens, which is what says "hit this one".
+## Swung, not lifted: the head travels on the handle's arc, so this is the
+## height it reaches and the angle follows from the handle's measured length.
+@export_range(0.05, 1.2, 0.01) var sledge_lift: float = 0.40
+## Where in `stake_time` the face meets the cap: the swing DOWN before it, the
+## peg going in after it. The blow now starts in the frame the child taps - the
+## hammer is already up - so this is how long they wait to hear it. It used to
+## be 0.60 s, because the tool flew in from the lawn first.
+@export_range(0.1, 0.8, 0.01) var sledge_strike: float = 0.35
 ## 0.38, not 0.08 (the plan's 1.4): squared, 0.08 was under two millimetres of
 ## picture for a sledge blow the child caused. Gone again in a quarter second.
 @export_range(0.0, 0.6, 0.01) var shake_stake: float = 0.38
@@ -368,9 +376,23 @@ extends Resource
 ## The plate's head buzzes on its mounts under the still handle.
 @export_range(1.0, 30.0, 0.5) var plate_hz: float = 11.0
 @export_range(0.0, 0.02, 0.001) var plate_stroke: float = 0.006
-## Seconds a bay's last patches take to go down on their own as the plate
-## leaves it (1.6), and where the child's hands are in the PLATE picture.
-@export_range(0.1, 2.0, 0.05) var pack_finish_time: float = 0.5
+## How long the child has to run the plate before the base is packed - the
+## WHOLE base, anywhere on it, in any path (the playtest of 2026-09-16: "it
+## doesn't matter where you compact you just have to compact for a few seconds,
+## say 5-6 seconds and it moves on to next phase").
+##
+## This replaces a coverage rule that a competent adult could not finish. The
+## plate's footprint is a plus of five cells out of a bay's twenty-four, so
+## `scrub_done` 0.85 of a bay meant visiting seventeen cell centres, in every
+## bay, three times - and nothing on the screen said so. Seconds are a promise
+## a three-year-old can keep. Only frames where the finger is really ON the
+## plate count, so a rest, a miss or an open settings panel buys nothing.
+@export_range(1.0, 20.0, 0.5) var pack_seconds: float = 5.5
+## Seconds the base's last patches take to go down on their own as the plate
+## lifts (1.6), and where the child's hands are in the PLATE picture. Longer
+## than it was: it now settles the WHOLE base, not one bay, so it needs to read
+## as ground going down rather than a switch being thrown.
+@export_range(0.1, 3.0, 0.05) var pack_finish_time: float = 1.2
 @export var plate_hold: Vector3 = Vector3(0.0, -0.85, 0.50)
 @export_range(0.3, 5.0, 0.1) var joint_drag_speed: float = 1.5
 @export_range(0.5, 6.0, 0.1) var screed_saw_hz: float = 1.8

@@ -827,7 +827,8 @@ func _build_forms() -> void:
 			marker.name = "Stake_%d_%dAt" % [i + 1, s + 1]
 			marker.position = home + Vector3(0.0, STAKE_H * 0.5, 0.0)
 			add_child(marker)
-			_stakes.append({"node": stake, "marker": marker, "home": home, "k": 0.0, "board": i + 1})
+			_stakes.append({"node": stake, "marker": marker, "home": home, "k": 0.0,
+				"board": i + 1, "along": along[i]})
 	_group_stakes()
 
 
@@ -2252,6 +2253,16 @@ func stake_home(i: int) -> Vector3:
 ## The middle of stake `i`'s painted cap where it stands NOW: proud before its
 ## blow, a stub above the board after. The ring sits on it; the sledge lands on
 ## its top (`stake_cap(i).y + STAKE_CAP * 0.5`).
+## Which way the board this peg stands against RUNS. The sledge swings in that
+## plane, so the arc is across the STAKE picture rather than into it: a handle
+## that always ran toward the garage was foreshortened to a bob at the kerb
+## pair, whose camera stands in the road looking back.
+func stake_along(i: int) -> Vector3:
+	if i < 1 or i > _stakes.size():
+		return Vector3.FORWARD
+	return _stakes[i - 1].get("along", Vector3.FORWARD)
+
+
 func stake_cap(i: int) -> Vector3:
 	var s := _at(_stakes, i)
 	if s.is_empty():
@@ -2548,7 +2559,10 @@ func plate_start(b: int) -> Vector3:
 ## A plate walked by a finger stays on the base, inside the forms and inside
 ## its own bay.
 func clamp_plate(world: Vector3, b: int) -> Vector3:
-	var band := bay_range(b)
+	# `b <= 0` is THE WHOLE BASE, apron to kerb. `bay_range` clamps a 0 up to
+	# bay 1, which would pen the plate at the garage end - and the whole point
+	# of the 2026-09-16 playtest fix is that it does not matter where you pack.
+	var band := Vector2(Z_APRON, Z_KERB) if b <= 0 else bay_range(b)
 	return Vector3(
 		clampf(world.x, CENTRE_X - WIDTH * 0.5 + PLATE_HALF.x, CENTRE_X + WIDTH * 0.5 - PLATE_HALF.x),
 		BASE_TOP,

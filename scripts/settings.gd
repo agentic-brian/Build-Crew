@@ -333,6 +333,13 @@ static func save_settings() -> bool:
 
 ## Removes the settings file (a parent's reset, or a test cleaning up).
 static func clear() -> void:
+	# The same switch `SaveGame.clear()` honours, for the same reason: a harness
+	# that has said "this is not the child's game" (SaveGame off, no override)
+	# must not be able to delete what a parent set. With an override it is a
+	# scratch file and this runs; without one, and with the game's own store
+	# switched off, it is a no-op.
+	if not persists():
+		return
 	var path := file_path()
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
@@ -342,6 +349,18 @@ static func clear() -> void:
 ## Only the probes want this; the game reads its settings once per launch.
 static func forget_load() -> void:
 	_loaded = false
+
+
+## Ask the OS again, next time somebody asks us.
+##
+## An iOS app is SUSPENDED, not killed. A parent whose child is mid-job presses
+## Home, turns Reduce Motion on because the shaking is making them ill, and comes
+## back to the same process - where a flag read once at launch would go on
+## shaking the picture for the life of the app, until somebody thought to swipe
+## it out of the app switcher. Every screen that can come back from the
+## background calls this on the way in.
+static func forget_motion() -> void:
+	_motion_known = false
 
 
 ## What the buses actually say right now, for the probes. Nothing else should

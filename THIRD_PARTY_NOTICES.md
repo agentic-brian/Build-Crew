@@ -35,14 +35,17 @@ Godot bundles.
 
 ## 3D models
 
-**All 33 of them are built by scripts in this family, and not one carries a
-texture** (every glTF chunk parses with zero `images` and zero `textures`).
+**All 33 of them (17 + 8 + 8) are built by scripts in this family, and not one
+carries a texture** (every glTF chunk parses with zero `images` and zero `textures`).
 There is no third-party model content in this project at all:
 
-- **14 from the fleet** (`assets/models/machines`, `assets/models/street`) —
-  `big-little-jobs-fleet`, this author's own low-poly pack, built by its
-  `tools/*.py`. Its README states there is no upstream licence obligation: the
-  geometry is generated, not sourced.
+- **17 from the fleet** — 3 in `assets/models/machines` and 14 in
+  `assets/models/street` — `big-little-jobs-fleet`, this author's own low-poly
+  pack, built by its `tools/*.py`. Its README states there is no upstream
+  licence obligation: the geometry is generated, not sourced. Twelve are
+  byte-identical to that pack's own files; ConcreteTruck, DumpTruck, SkidSteer,
+  DetachedGarage and StarterHome are local rebuilds from the same builders —
+  same provenance, different bytes.
 - **8 built here** (`assets/models/props`) — `tools/make_site_props.py` and
   `tools/make_blade.py` build the Jackhammer, Sledge, ScreedBoard, Jointer,
   Broom, ComeAlong, PlateCompactor and PushBlade from primitives.
@@ -69,14 +72,41 @@ Both under the SIL Open Font Licence 1.1, both shipped as `.woff2` in
 
 The OFL's condition 2 is the one with teeth: the fonts may be bundled and sold
 inside a program, but they may not be sold on their own. Neither of these
-families declares a Reserved Font Name, so no renaming is required. The two
-files are byte-identical to the ones the marketing site serves.
+families declares a Reserved Font Name, so no renaming is required.
+
+Where each binary came from, per file, so the next auditor can re-check it:
+
+| file | md5 | source |
+|---|---|---|
+| `assets/fonts/NunitoSans.woff2` (31,076 B) | `e010923d59d4999d2be60cae63416f8d` | byte-identical to the latin subset the marketing site serves (`dist/assets/nunito-sans-latin-wght-normal-BWQ3gi2K.woff2`) |
+| `assets/fonts/Fredoka-Bold.woff2` (15,900 B) | `f67eddbc391c526a6f7848efd539e51f` | the static 700 instance from `@fontsource/fredoka`, `files/fredoka-latin-700-normal.woff2` |
+
+The Fredoka is **not** among the files the site serves: the site's web bundle
+ships `@fontsource-variable/fredoka`'s variable face instead (a different
+binary, `9591efe1…`). Same family, same licence, different cut — and an earlier
+draft of this file claimed byte-identity for both fonts, which was true of one
+and false of the other.
 
 ## Sound effects
 
 155 mp3 files in 76 groups under `assets/sfx/`, generated with **ElevenLabs
-Sound Effects v2** on a paid plan. `docs/sfx.md` records which flow made which
-group and what each one is for.
+Sound Effects v2** on a paid plan. Where each group's generation record lives,
+split the way the models are above:
+
+- **44 groups are recorded in `docs/sfx.md`** — the clips made for this game,
+  with the flow that made each one and what it is for.
+- **32 groups (68 files) came across from Car Garage's library** —
+  `airflow`, `breath`, `clink`, `crank`, `drip`, `engine_rough`, `engine_start`,
+  `glug`, `heave`, `key`, `latch`, `paintspray`, `purr`, `ratchet`, `reel`,
+  `roar`, `roll`, `sander`, `snap`, `sparkle`, `sputter`, `squeal`,
+  `tirebounce`, `valveclick`, `wiper` and seven unused `voice_*` groups. Same
+  model, flow "Car Fixer SFX"; their record is in `car-fixer/docs/sfx.md`, and
+  **that repository is private**, so this public one cannot produce their dates
+  on its own.
+
+The seven unused `voice_*` groups (ambulance, firetruck, garbagetruck, racecar,
+schoolbus, sportscar, towtruck) can never be selected — `SiteLook`'s car table
+is closed at six vehicles — and are worth deleting when the export preset lands.
 
 ElevenLabs grants commercial use of generated audio to accounts on a paid plan,
 and that grant hangs on the subscription having been live on the generation

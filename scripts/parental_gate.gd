@@ -20,8 +20,12 @@ extends Control
 ## rote and it cannot be got past by tapping the same place twice.
 ##
 ## Nothing about it is drawn for a child. It is the one screen in this game
-## written in words, in the interface face, for the person holding the tablet -
-## the same reasoning as the "by" under the title.
+## written in words, for the person holding the tablet - the same reasoning as
+## the "by" under the title. Its PROSE is the interface face (the hint under
+## the keypad, `Brand.body`); the title, the sum, the typed answer and the keys
+## are the display face, because they are read as shapes and digits rather than
+## as sentences, and at this size that is the legible choice. DESIGN 7g says
+## which half is which.
 
 ## The gate was passed. The caller opens whatever it was guarding.
 signal passed

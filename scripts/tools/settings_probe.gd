@@ -100,6 +100,41 @@ func _on_the_title() -> void:
 	panel.call("close")
 	await _frames(3)
 	_check(not bool(panel.get("_open")) and not get_tree().paused, "the tick closes it and the screen runs again")
+
+	# The disc that throws a saved drive away, HELD when the panel takes the
+	# screen. This is the path the panel's third ported edit exists for, and the
+	# one nothing tested: a paused tree is deaf to RELEASES, so a finger lifted
+	# off this disc behind the panel is a lift the menu never hears, and the ring
+	# goes on filling once the panel closes - clearing the child's save with
+	# nothing on the screen touched. The first version of that edit was
+	# unreachable: `_release_pointers()` returned at a missing HUD sibling, which
+	# the title row has never had.
+	var menu := title.menu() as StartMenu
+	if menu != null:
+		menu.set_mode(true)
+		await _frames(2)
+		var fired := [0]
+		menu.fresh_pressed.connect(func() -> void: fired[0] += 1)
+		var disc := menu.fresh_rect().get_center()
+		_finger(disc, true)
+		await _frames(3)
+		_check(bool(menu.get("_holding")), "a finger is holding the 'new drive' disc")
+		# The PARENT's finger, a second one, while the child's is still down.
+		await _touch_second(cog.get_global_rect().get_center())
+		_check(bool(panel.get("_open")), "the cog still opens over a held disc")
+		_check(not bool(menu.get("_holding")) and menu.fresh_fill() == 0.0,
+			"and the panel LETS GO of it, ring and all (%.2f)" % menu.fresh_fill())
+		# The finger lifts behind the panel, where nobody hears it.
+		_finger(disc, false)
+		panel.call("close")
+		await _frames(3)
+		# Real seconds, not frames: the ring fills on a wall clock, and a headless
+		# frame is worth almost no time at all.
+		await get_tree().create_timer(StartMenu.HOLD_TIME + 0.25, false).timeout
+		_check(fired[0] == 0 and menu.fresh_fill() == 0.0,
+			"and it never fills on afterwards: the saved drive is still there")
+		menu.set_mode(false)
+		await _frames(2)
 	# What a parent set is remembered.
 	_check(FileAccess.file_exists(Settings.file_path()), "what they set is written down")
 	title.queue_free()
@@ -151,16 +186,37 @@ func _in_the_job() -> void:
 ## really delivers one.
 func _touch(at: Vector2) -> void:
 	for pressed in [true, false]:
+		_finger(at, pressed)
+		await _frames(2)
+	await _frames(4)
+
+
+## Half a finger - down, or up - for the tests that need one still ON the glass.
+##
+## `index` matters more than it looks. Godot mirrors only finger 0 as the
+## emulated mouse, and a Button that took a press keeps the pointer until it is
+## released ANYWHERE - so a second tap pushed on index 0 releases whatever the
+## first one was holding. A test written that way lets go of the disc by itself
+## and passes over a panel that does nothing, which is exactly how this check
+## first "passed" against the bug it was written for.
+func _finger(at: Vector2, pressed: bool, index: int = 0) -> void:
+	if index == 0:
 		var mb := InputEventMouseButton.new()
 		mb.button_index = MOUSE_BUTTON_LEFT
 		mb.position = at
 		mb.pressed = pressed
 		get_viewport().push_input(mb, true)
-		var t := InputEventScreenTouch.new()
-		t.index = 0
-		t.position = at
-		t.pressed = pressed
-		get_viewport().push_input(t, true)
+	var t := InputEventScreenTouch.new()
+	t.index = index
+	t.position = at
+	t.pressed = pressed
+	get_viewport().push_input(t, true)
+
+
+## A whole second finger: the parent's tap, landing while the child's is down.
+func _touch_second(at: Vector2) -> void:
+	for pressed in [true, false]:
+		_finger(at, pressed, 1)
 		await _frames(2)
 	await _frames(4)
 

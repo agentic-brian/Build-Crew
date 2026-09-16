@@ -136,6 +136,15 @@ var _corner_rest: Dictionary = {}
 ## The push blade, when one is fitted, and the marker on its cutting edge.
 var _blade: Node3D
 var _blade_edge: Node3D
+## Where the arm and the bucket were last PUT. A beat that carries on from the
+## pose the last beat left has to start there: the second push began by lowering
+## from "carried high" when the blade was already down on the dirt, which threw
+## the arm 25 degrees up on its first frame and then took `bucket_dump_time` to
+## put it back, with the machine standing still in the garage ("the blade rests
+## or jumps when the skid steer is in the garage right before it pushes", the
+## playtest of 2026-09-16).
+var _bucket_lift: float = 0.0
+var _bucket_curl: float = 0.0
 ## The extension chute, when one is clipped on, and its end.
 var _chute_ext: Node3D
 var _pour_end: Node3D
@@ -743,6 +752,8 @@ func forward() -> Vector3:
 ## carried high; `curl` 0 is the cutting edge flat on the dirt and 1 is tipped
 ## right forward to shed the load.
 func set_bucket(lift: float, curl: float) -> void:
+	_bucket_lift = clampf(lift, 0.0, 1.0)
+	_bucket_curl = clampf(curl, 0.0, 1.0)
 	_turn("LiftArm", Vector3.RIGHT, deg_to_rad(lerpf(arm_down_deg, arm_up_deg, clampf(lift, 0.0, 1.0))))
 	if _blade != null:
 		_turn("Bucket", Vector3.RIGHT, deg_to_rad(lerpf(bucket_flat_deg, bucket_flat_deg + BLADE_TILT_DEG,
@@ -802,6 +813,16 @@ func fit_blade() -> bool:
 
 func has_blade() -> bool:
 	return _blade != null
+
+
+## Where the blade IS - 0 on the dirt, 1 carried high - so a verb can lower it
+## FROM WHERE IT STANDS rather than from where it usually starts.
+func bucket_lift() -> float:
+	return _bucket_lift
+
+
+func bucket_curl() -> float:
+	return _bucket_curl
 
 
 ## Shifts the model so the middle of its meshes is on the node's x. The fleet

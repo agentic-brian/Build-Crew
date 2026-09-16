@@ -44,6 +44,10 @@ func _ready() -> void:
 	# settings file is left alone (`Settings.persists`). A picture taken on a dev
 	# machine with a job half done must not come out as that job (the plan's 6.2).
 	SaveGame.enabled = false
+	# Nor the developer's accessibility settings: with Reduce Motion on, every
+	# frame this harness takes comes out of a game whose camera never shakes,
+	# and the difference is invisible in the PNG. Pinned off, like the probes.
+	Settings.motion_override = -1
 	if _scene_path == "":
 		push_error("shot.gd: no --scene= given")
 		get_tree().quit(2)

@@ -2671,9 +2671,10 @@ later session has to keep:
 > reason to open (the panel's one string, "Privacy Policy"). **The typeface is
 > the signal**: Fredoka is the child's face, Nunito Sans is the adult's.
 
-Counted on the frames: the job shows **nothing** (frame 73), the panel shows two
-words in the adult's face, low contrast, in the corner (74), the gate shows a
-sum and a keypad (72). A child who presses the cog sees pictures — headphones, a
+Counted on the frames: the job in progress shows **nothing** (frame 73 - the
+payoff's kept "YAY!" is the one exception, and fires on the last tap, which no
+frame here poses), the panel shows two words in the adult's face, low contrast,
+in the corner (74), the gate shows a sum and a keypad (72). A child who presses the cog sees pictures — headphones, a
 slider, a quaver, a green tick — and one line of grey text they cannot read in a
 corner they have no reason to touch. The way out is the biggest thing on the
 screen and it is a tick, not a word.
@@ -2759,6 +2760,124 @@ be invisible until a parent, or a reviewer, or an accessibility user found it.
 - **`MOTION_PROBE` (10)** — the switch really stops the shake, and the camera it
   stopped is not left tilted.
 
+## What the verification pass found
+
+Five reviewers, one per lens, each told to refute rather than confirm, and an
+independent skeptic on every finding that was not trivial: 26 agents, 21
+findings, **15 confirmed and fixed**, 6 refuted. Two of the fifteen were the
+kind this ritual exists for — both of them in the code this session was proudest
+of.
+
+1. **The panel's own headline fix was dead code.** `_release_pointers()` looks
+   up a `HUD` sibling and RETURNS if there is none. In the job there is one; on
+   the title row there is not — the lot's HUD lives inside the lot — so the
+   function returned before it ever reached the line that lets go of the held
+   "new drive" disc. The whole path ran: a child holds the disc, a parent taps
+   the cog, the tree freezes and never delivers the release, the child lifts,
+   the panel closes, `_process` resumes with the hold still true, the ring fills
+   to the end with nothing on the screen touched, and **the child's half-built
+   drive is thrown away** — the exact disaster three documents claimed was
+   prevented. The missing sibling now SKIPS the pad block instead of returning.
+2. **A pause does not stop a coroutine.** Every verb animates inside
+   `while …: await process_frame`, and `process_frame` is emitted whether or not
+   the tree is paused: `paused` stops `_process`, not an `await`. So the panel
+   froze the picture, the HUD and the cameras while the POUR went on pouring
+   behind it — unsteered, into whichever cell the chute last sat over — drove
+   the bar up behind the dim, wrote the save mid-pause, and handed the parent
+   back a phase the child never did. Every pump now takes its delta from
+   `SiteVerbs._dt`, which is 0.0 while the tree is paused: the loops stay alive
+   and exactly where they were, so there is nothing to unwind on the way out.
+   (The waits BETWEEN beats never had this bug: every `create_timer` in the game
+   already passes `false` for `process_always`.)
+3. **The engine was writing a history of when the app was used.** `privacy_probe`
+   asked `ProjectSettings.get_setting`, which does not apply feature tags; the
+   engine reads `get_setting_with_override`, and the built-in default is
+   `enable_file_logging.pc = true`. So the check was green on every desktop run
+   while `user://logs/` filled with one file per launch, named
+   `godot2026-09-16T09.05.37.log` — filenames that are literally a record of
+   when this app was opened — beside the two files the policy names, with the
+   GPU and the device in them. Both keys are pinned off in `project.godot`, the
+   probe reads the effective value, and it now also asserts against the DISK,
+   because a setting is a promise and a directory is evidence.
+4. **The policy the gate opens does not cover this game.** A parent answers the
+   sum and lands on a document that lists Tree Crew and Car Garage and describes
+   three files, none of them Build Crew's — while this game writes two. That is
+   the one thing the Kids-Category gate exists to make good. The session's own
+   plan note had collapsed part 6 to "the name is answered", which left the
+   policy half tracked nowhere; it is tracked again, as release-blocking, and
+   the probe now pins the URL instead of accepting any address beginning
+   `https://`.
+5. **The panel answered fingers through both fades.** A parent set to IGNORE
+   does not stop its children being picked, and Godot picks on visibility, never
+   on modulate. So for 0.18 s on the way in the slider and the tick answered
+   fingers while they were ghosts, and for 0.12 s on the way out — over a job
+   already running again — a second tap on the still-drawn tick was answered by
+   nothing at all, and a tap that found the privacy link raised the grown-up's
+   sum behind the fade, where it waited for the next child who pressed the cog.
+6. **Reduce motion was read once and kept for the life of the process.** An iOS
+   app is suspended, not killed: a parent who goes to Accessibility because the
+   shaking is making their child ill comes back to the same process and the same
+   stale answer, until somebody thinks to swipe the app away. `forget_motion()`
+   is pulled on the way back in, on both screens.
+7. **Three of the four new probes had a check that could not fail.** The
+   camera's "never caught mid-wobble" sampled the basis BEFORE any shake and
+   compared `basis.z` — the one axis a roll about FORWARD leaves exactly where
+   it was — so it read 0.00000 whatever the camera did; the rings' "still lit"
+   read the container's scale (the pulse is written onto the ring CHILDREN),
+   threw the sample away unused, and asserted a COUNT; and "the OS is asked
+   once, then remembered" called one pure function twice, which is true whether
+   the memo exists or not. All three now establish their precondition and then
+   poke the thing under test — the camera is proved rolling before the switch is
+   asked, the ring's own scale is watched over sixty frames, and the memo is
+   poisoned to prove the second ask never reaches the OS. `MOTION_PROBE` is
+   16 checks now, not 10.
+8. **Three claims in the licence file were wrong**, in the one document whose
+   header promises every claim was checked against the files. The models tally
+   read 14 + 8 + 8 for 33 assets — the fleet's share is 17, so three GLBs had no
+   stated provenance at all. "The two files are byte-identical to the ones the
+   marketing site serves" was true of Nunito Sans and false of Fredoka: the game
+   ships `@fontsource/fredoka`'s static 700 instance, the site serves the
+   variable face. And `docs/sfx.md` was named as the record for 76 sound groups
+   when it names 44; the other 32 came from Car Garage's library, whose
+   repository is private — so this public one cannot produce their dates, which
+   is worth saying out loud rather than implying otherwise. Every number in that
+   file was re-counted from the files before it was rewritten.
+9. **§7g's words rule had deleted the user's own decision.** Stated absolutely —
+   "For the CHILD: none, ever" — it contradicted decision 2, the kept "YAY!",
+   which DESIGN 7d, the decided list, the pillars and a smoke check all carry.
+   A later session reading §7g as the contract would have deleted the banner and
+   reversed a decision the user made explicitly. The exception is in the rule
+   now. The same bullet's "the typeface is the signal" was not what the gate is
+   drawn in either: fifteen of its sixteen strings are Fredoka. What ships is a
+   rule about PROSE — every sentence for an adult is Nunito Sans, and the sum,
+   the answer and the keys stay in the display face because they are read as
+   digits, not sentences — so that is what the rule says now.
+10. **A regression of this session's own making:** `SiteHud._aim_screen` counted
+    `hint_margin` twice, because the safe rect it now measures against had
+    already been grown by it. The white mime flipped below its target a whole
+    margin earlier than before 6.4, on every screen, notch or no notch.
+    `Settings.clear()` also did not honour the switch `SaveGame.clear()` honours,
+    so a harness could delete what a parent had set; and `shot.gd` left
+    reduce-motion to whatever the developer's own OS said, which made this
+    session's frames not reproducible. All three fixed.
+
+**And the test that catches the first one.** `settings_probe` grew the path its
+own docstring had claimed to cover: the disc held by one finger, the cog tapped
+by a second, and the ring measured while the panel is up. Written the obvious
+way it passed against the bug — because both fingers used index 0, and a Button
+that takes a press keeps the pointer until it is released ANYWHERE, so the cog's
+tap let go of the disc by itself. With the parent's tap on a real second finger
+the check reads `0.08` of a ring still filling and goes red, and green with the
+fix. A regression test that has not been watched fail is a regression test that
+proves nothing.
+
+Refuted, and left alone: that `close()` leaves the slider latched (it does not —
+the release is handled); that a kicked pad's finger circle slides off the disc
+it paints; that the notices claim the licence texts already ship in the bundle
+(the file says the export preset will carry them, which is the plan's part 4);
+that the save's no-clock proof never runs the real producer; and two more
+readings of the probes that did not survive their own skeptic.
+
 Not taken: the cog sits in the child's reach on purpose — a parent's control
 hidden behind a gesture is a parent's control nobody finds, and what a child
 gets for pressing it is a frozen picture and a green tick; the panel dims the
@@ -2784,12 +2903,160 @@ The frames, windowed, into `renders/critic/session8/`. Two new arguments:
 | `77_phone_title` | 1565x720 | `--scene=main.tscn --settings=open --safe=iphone` | the panel at a phone's shape |
 | `78_phone_pads` | 1565x720 | `--step=pour_chute --shot=CHUTE --settings --safe=iphone` | the four steering pads and the chute, clear of the hardware |
 
-**Green: `SITE_SMOKE PASS 491/491`, `TITLE_PROBE PASS 62/62`,
-`SWITCH_PROBE PASS 18/18`, `RESUME_PROBE PASS 321/321`,
-`MACHINE_PROBE PASS 20/20`, `SETTINGS_PROBE PASS 20/20`,
-`PRIVACY_PROBE PASS 29/29`, `SAFE_AREA PASS 23/23` (iPhone and iPad),
-`MOTION_PROBE PASS 10/10` (2026-09-16).**
+**Green after the verification pass: `SITE_SMOKE PASS 491/491`,
+`TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`,
+`RESUME_PROBE PASS 321/321`, `MACHINE_PROBE PASS 20/20`,
+`SETTINGS_PROBE PASS 24/24`, `PRIVACY_PROBE PASS 31/31`,
+`SAFE_AREA PASS 23/23` (iPhone and iPad), `MOTION_PROBE PASS 16/16`
+(2026-09-16). The three probes that grew are the three whose checks were found
+not to prove what they said.**
 
 Left for part 4, which is the only part of 6.4 still open: the export preset,
 the bundle id `com.biglittlejobs.buildcrew`, fifteen icon sizes, the splash, and
 the Build Crew rows on the site's own policy page.
+
+# The playtest of 2026-09-16: four notes, and the one that was a wall
+
+The user played the build — the engine's own log has the launch at 09:27 and the
+save on disk stopped at `compact_base` with nothing done — and sent four notes.
+One of them is not a preference. It is a phase they could not finish.
+
+## 1. The compaction could not be finished, by anybody
+
+> "unable to get past compaction - make it where it doesn't matter where you
+> compact you just have to compact for a few seconds, say 5-6 seconds and it
+> moves on to next phase."
+
+The arithmetic, which nobody had done: the base is a 6 x 12 grid of 0.60 x 0.75 m
+cells; a bay is four rows, twenty-four cells; `pack_coverage_in` is the MEAN over
+them; and the plate's footprint at `plate_radius` 0.78 is a PLUS of five cells.
+So a child standing still tops out at **5/24 = 0.21** against a `scrub_done` of
+**0.85** — and to pass it the plate had to visit about seventeen of the
+twenty-four cell centres, in every bay, three times. Nothing on the screen said
+so. The white mime pointed at the loosest patch, which is the right hint for a
+rule nobody can satisfy.
+
+Session 5 built that rule and the session's own hand-off flagged the smell —
+"three bays of dragging, about 10 s each in the smoke - is it too long" — and
+then shipped it. The smoke passed because the smoke walks a flawless four-lane
+boustrophedon per bay. **A test that plays better than any child can is a test
+that cannot find this.**
+
+It is a CLOCK now. One beat over the whole base, `pack_seconds` 5.5, ended by
+seconds of real work rather than by ground covered — and only frames where the
+finger is really on the plate count, so a rest, a miss or an open settings panel
+buys nothing. Then, as the plate lifts, every cell the child never reached goes
+down with the ones they did (`pack_finish_time` 0.5 -> 1.2, because it is the
+whole base settling now, not one bay, and it has to read as ground going down
+rather than a switch being thrown). The three beats became one worth six stops,
+so the job still totals 83 over 25 rows and no save is invalidated.
+
+Proved, not assumed: a finger parked in ONE place — the exact case the old rule
+made impossible — now ends the phase in 5.50 s of work, coverage 1.000, every
+stone flat.
+
+## 2. The hammer swings now, and it waits
+
+> "Hammer animation should be more like a swing of a sledge hammer, like it
+> swings up and waits for the child to touch the stake and then it swings down
+> to hit it."
+
+What the game did: the sledge lay on the lawn until the tap, then flew in over
+the peg, then paused 0.33 s, then translated straight down with a **fixed
+basis** — a lowering, not a swing — and the blow landed 0.60 s after the finger.
+The wind-up existed, for 0.12 s, on the wrong side of the tap.
+
+The sharp part is that every posed screenshot showed it right. `_pose_tool` has
+stood the sledge wound up over the first open peg since session 4, and its own
+docstring says it exists because "the `--stage` path the screenshots are judged
+from drifts away from what the game really does, and then the EVIDENCE flatters
+the build." It drifted the other way: the posed picture was right and play was
+wrong, so fifteen critic rounds judged a hammer that was never there. The user
+played the game and saw the difference in one beat.
+
+Now: `arm_rings` stands the sledge wound up over the peg the ring and the mime
+point at, from the moment the row opens — the raised hammer IS the invitation —
+and the tap brings it down. One helper, `SiteMain.hold_sledge`, is used by the
+row's opening, by the beat, by the posed picture and by a resumed row, so the
+four cannot drift apart again. The fall starts in the frame the finger lands and
+the blow is heard at `sledge_strike` 0.35 of `stake_time` — **0.25 s after the
+tap instead of 0.60** — and past the strike the face rides the cap down.
+
+And it SWINGS: the head travels on an arc about the hands, on the handle's
+measured length (0.99 m, read off the Body mesh, never typed), in the plane of
+the board the peg stands against. Measured: 88 cm of head travel and 37 degrees
+of turn, against 26 cm of vertical translate and 0 degrees before.
+
+Two things that had to be got right by looking, not by arithmetic. The first
+swing axis sent the head down through the ground and toward the garage — the
+sign of one cross product. The second put the head up inside the dark garage
+doorway, where a sledge reads as a pole in a hole; the handle now leans away
+from the eye watching that pair, so the head rises over the open drive and the
+arc crosses the picture instead of going into it.
+
+The jackhammer deliberately does NOT get this. It is a bit SET on the concrete
+and held rattling, not a blow — a breaker wound up over a slab would be a lie
+about the tool.
+
+## 3. The blade jumped on the second push
+
+> "i think i saw when you do the 2nd push of debris the blade rests or jumps
+> when the skid steer is in the garage right before it pushes."
+
+Exactly right, and it was one line. The END of a pass drives the machine back to
+the next lane inside the garage and puts the blade DOWN there. The START of a
+pass then lowered the blade unconditionally — from "carried high" — so on the
+second push the arm snapped up 25 degrees on the first frame and spent
+`bucket_dump_time` putting it back, with the machine standing still. `Machine`
+remembers where the arm was last put, and the lower now runs from there, and not
+at all when it is already down.
+
+## 4. The water is spray, not a stream
+
+> "from previous plays i don't like the solid stream on the water sprayer I just
+> want the spray."
+
+There were two things drawn, side by side. The spray is a fan of 110 billboard
+drops on their own ballistics. The stream was four `CylinderMesh` segments laid
+on a parabola every frame — a tapered solid tube 24 mm across at the nozzle
+growing to 100 mm at the landing, unshaded so it never took the light. That is a
+fire hose. It is gone, the fan opens wider now that nothing is drawn down the
+middle of it, and the drop count doubled to 220 so the throw reads as continuous
+water: all of them are alive at once spread over the whole reach, so at the
+longest aim 110 sat 8 cm apart while each drop is 2-4 cm across — a dotted line.
+
+One trap on the way out, and it is the interesting one: the smoke's "the hose
+never crosses the water on screen" check read the rod's segments. Delete them
+and `jet_points()` returns a single point, `_screen_crossings` iterates an empty
+range, and the check goes on printing PASS while testing nothing. It is
+`water_line()` now — six points down the path a drop really flies, from the same
+numbers the particles are given — and the suite asserts the line exists, is in
+the picture, and that no cylinder is drawn inside the spray.
+
+## The frames, and the suites
+
+Into `renders/critic/session9/`. 80 and 81 are kept deliberately: they are the
+two wrong answers, and the second of them is the reason a number is not enough.
+
+| frame | args | what it shows |
+|---|---|---|
+| `80_sledge_waiting` | `--stage=formed --shot=STAKE` | the first swing, at `sledge_lift` 0.60 - the head out of the top of the picture, reading as a pole in the garage |
+| `81_sledge_lift40` | the same, lift 0.40 | lower, but the head still winds up INTO the dark doorway |
+| `82_sledge_lean` | the same, the handle leaned away from the eye | the hammer, over its peg, up in the light: what a raised sledge looks like |
+| `83_sledge_group2` | `--stage=formed --done=2 --shot=STAKE` | the next pair, out on the open drive |
+| `84_spray_no_stream` | `--stage=poured --shot=HAND --hold` | the water with no rod in it: a fan of drops from the nozzle in the child's hands |
+| `85_plate_clock` | `--stage=tipped --shot=PLATE --hold` | the plate on the loose base - the picture is unchanged, only the rule that ends it |
+
+**Green: `SITE_SMOKE PASS 492/492`, `RESUME_PROBE PASS 315/315`,
+`TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`, `MACHINE_PROBE PASS 20/20`,
+`SETTINGS_PROBE PASS 24/24`, `PRIVACY_PROBE PASS 31/31`,
+`SAFE_AREA PASS 23/23` (iPhone and iPad), `MOTION_PROBE PASS 16/16`
+(2026-09-16).** The resume probe has six checks fewer because the compaction is
+one beat now and not three; the smoke has one more.
+
+Not taken: the sledge winds up over the peg the RING and the mime point at,
+which is the far one of the pair - the near one would frame better, but a hammer
+over one peg and a mime over another is two instructions; the spray's drop count
+is a number to retune if 220 still reads thin at a long aim; and the seven unused
+`voice_*` sound groups that the notices file now names are still on disk, for
+the export pass to delete.

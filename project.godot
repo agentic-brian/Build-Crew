@@ -16,6 +16,20 @@ run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(1, 0.952941, 0.807843, 1)
 
+[debug]
+
+; The engine's own default is `enable_file_logging=false` with
+; `enable_file_logging.pc=true`, so on every desktop run it was writing
+; `user://logs/godot<date>T<time>.log` - filenames that are literally a history
+; of when this app was opened, beside the two files the privacy policy names,
+; with the GPU and device in them. Both keys are pinned, because the base one
+; alone is still beaten by the engine's own `.pc`. `privacy_probe` reads this
+; through `get_setting_with_override`, which is what the engine reads: plain
+; `get_setting` does NOT apply feature tags, and that is why the check was
+; green while the logs were being written.
+file_logging/enable_file_logging=false
+file_logging/enable_file_logging.pc=false
+
 [display]
 
 window/size/viewport_width=1280

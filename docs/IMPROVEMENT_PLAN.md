@@ -862,10 +862,15 @@ sibling's version covers - and `safe_area_probe` measures both screens at
 guards `shake()`, `hold_floor()` and the shake's own `_process`, while the
 slab's kick, the bit's stroke, the rings and every answer to a finger keep
 moving. The notices file, the two generated Godot licence texts and a
-`.gdignore` on `renders/` are in. **Part 6, the name, is answered: Build Crew.**
-Part 4 (export presets, the fifteen icons, the splash, the bundle id) is the
-only piece left, and every place the name has to go is listed in the session-8
-log.
+`.gdignore` on `renders/` are in. **Part 6 is HALF done: the name is answered
+(Build Crew), but its other half is not** - the published policy at
+<https://biglittlejobs.com/privacy> still lists only Tree Crew and Car Garage,
+and describes neither of the two files this game writes. The gate opens a
+document that does not name this app, which is the one thing the gate exists to
+make good, so this is release-blocking for the Kids Category and belongs with
+part 4. Part 4 (export presets, the fifteen icons, the splash, the bundle id)
+is otherwise the only piece left, and every place the name has to go is listed
+in the session-8 log.
 1. The settings cog, the eleven-step slider and the music toggle
    (`settings_menu.gd`; `Settings` is already here, so this is UI only). It
    is the one thing a parent reaches for in the first two minutes, and the

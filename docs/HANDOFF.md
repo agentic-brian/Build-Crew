@@ -1,4 +1,4 @@
-# Build Crew - hand-off (written 2026-09-16, end of session 8)
+# Build Crew - hand-off (written 2026-09-16, after session 8 and the playtest)
 
 For whichever session picks this up next. Everything below is true as of the
 date above; the code and `docs/critic_log.md` outrank this file if they
@@ -25,10 +25,21 @@ disagree.
   called BUILD CREW** (Big Little Jobs is the publisher, Build Crew is the
   game). They are recorded at the top of the plan's section 11. No decision is
   open.
-- Green on 2026-09-16: `SITE_SMOKE PASS 491/491`, `RESUME_PROBE PASS 321/321`,
-  `TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`, `MACHINE_PROBE PASS 20/20`,
-  `SETTINGS_PROBE PASS 20/20`, `PRIVACY_PROBE PASS 29/29`, `SAFE_AREA PASS 23/23`
-  (run twice, once per device shape) and `MOTION_PROBE PASS 10/10`.
+- Green on 2026-09-16, after session 8's verification pass AND the playtest
+  fixes: `SITE_SMOKE PASS 492/492`, `RESUME_PROBE PASS 315/315`,
+  `TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`, `MACHINE_PROBE PASS
+  20/20`, `SETTINGS_PROBE PASS 24/24`, `PRIVACY_PROBE PASS 31/31`,
+  `SAFE_AREA PASS 23/23` (run twice, once per device shape) and `MOTION_PROBE
+  PASS 16/16`. (The resume probe has six checks fewer than session 8's 321
+  because the compaction is one beat now, not three.)
+- **THE PLAYTEST OF 2026-09-16 IS BUILT** (the last section of
+  `docs/critic_log.md`). Four notes, one of which was a WALL: the compaction
+  could not be finished by anybody, and is a CLOCK now - `pack_seconds` 5.5,
+  one beat over the whole base, anywhere, any path. Also: the sledge waits
+  wound up over its peg and SWINGS down on the tap (`SiteMain.hold_sledge`);
+  the skid steer's blade no longer jumps at the second push; the hose's solid
+  stream is gone and the spray is the water. The job is still 25 rows and 83
+  stops, so saves from before it still load.
 - **There is a settings cog now, top-left of BOTH screens** (`SettingsMenu`, the
   last child of `main.tscn` and `site.tscn`), with a `ParentalGate` in front of
   the privacy link. Opening it pauses the tree AND lets go of every finger that
@@ -39,7 +50,9 @@ disagree.
   one disc per job in `data/jobs/jobs.json`, the lot itself posed behind it, and
   a held orange disc to throw a saved job away. NEXT and the house cut back to
   it. Every harness still names its own scene, so nothing else moved.
-- The job is 25 rows and 83 stops now (`data/jobs/new_driveway.tres`).
+- The job is 25 rows and 83 stops (`data/jobs/new_driveway.tres`). `compact_base`
+  is ONE beat of weight 6 (it was three of weight 2), ended by
+  `SiteConfig.pack_seconds`, not by coverage.
 - The contract notes for the seven sessions are `docs/DESIGN.md` sections 7,
   7a-7f; `docs/CRITIC.md`'s decided list has a "since the plan's sixth
   session" bullet. `docs/sfx.md` has seventeen clips (`platerattle` the newest)
@@ -227,6 +240,45 @@ Run everything from `build-crew/` (`--path .`).
   yellow in it. A resumed row opens on its own shot wherever a press during an
   eye swoop would move work (drags) or the subject is off the wide (back-ins).
 
+- **A test that plays better than any child can will never find a phase a child
+  cannot finish.** The smoke walked a flawless four-lane boustrophedon over every
+  bay, so it passed the compaction the user could not get past. When a rule is a
+  COVERAGE rule, ask what a still finger, or one lazy lane, actually reaches.
+- **One helper, or the evidence flatters the build.** `_pose_tool` stood the
+  sledge wound up for the screenshots while the verb flew it in after the tap:
+  the posed picture was right and play was wrong for four sessions, and every
+  critic round judged the pose. A tool that a pose helper AND a verb both
+  position must be positioned by ONE function that both call.
+- **Deleting geometry a check reads makes the check VACUOUS, not red.** Removing
+  the hose's jet segments left `jet_points()` returning one point, so
+  `_screen_crossings` iterated an empty range and the check went on passing. When
+  a thing a test measures is deleted, re-arm the test in the same edit.
+- **`get_tree().paused` stops `_process`, NOT a coroutine.** `process_frame` is
+  emitted every frame whether or not the tree is paused, so every
+  `while ...: await process_frame` verb ran straight through the settings panel
+  - the pour went on pouring behind it. Deltas come from `SiteVerbs._dt`, which
+  is 0.0 while paused. (`create_timer(..., false)` DOES wait out a pause, which
+  is why the gaps between beats never had this bug.)
+- **A parent at `MOUSE_FILTER_IGNORE` does not stop its CHILDREN being picked**,
+  and Godot picks on `is_visible_in_tree()`, never on modulate - so a panel
+  fading out goes on answering fingers unless every pickable child is flipped
+  too.
+- **`ProjectSettings.get_setting` does not apply feature tags.** The engine reads
+  `get_setting_with_override`. The difference was a privacy claim: the base
+  default for file logging is false and the `.pc` default is true, so a check
+  read green while `user://logs/` filled with a timestamped file per launch.
+- **A real-input probe's second tap must use a real second finger.** Only finger
+  0 is mirrored as the emulated mouse, and a Button that took a press keeps the
+  pointer until it is released ANYWHERE - so a second tap pushed on index 0
+  releases whatever the first one was holding, and a test written that way lets
+  go of the thing it is supposed to be proving somebody else lets go of.
+- **Watch a regression test FAIL before trusting it green.** The check written
+  for the held-disc bug passed against the bug on its first run, for exactly the
+  reason above. A test that has never been seen red proves nothing.
+- **The `HUD` is a sibling only in the JOB.** On the title row the panel's parent
+  is `Title` and the HUD lives inside the lot it instances, so a
+  `get_node_or_null("HUD")` that RETURNS on null makes everything after it dead
+  code on that screen.
 - **A hidden `CanvasLayer` does not stop a raw `_input`.** `ToyHud._input` ran
   under a backdrop nobody could see and swallowed presses meant for the menu on
   top of it. Hiding a HUD means `show_pads([])`, `set_pads_enabled(false)` and

@@ -54,8 +54,12 @@ const SPRAYERS: Array[String] = ["hose"]
 ## The others were never scaled - the note was applied to one dictionary entry
 ## (round 3): the sledge's head was 25 px and the jointer's blade 10.
 const SCALE := {"jackhammer": 1.85, "sledge": 1.45, "jointer": 1.6, "broom": 1.2, "rake": 1.15}
-## How many drops of water the hose throws.
-const SPRAY_COUNT := 110
+## How many drops of water the hose throws. Doubled when the solid rod down the
+## middle of the spray was taken out (2026-09-16): all of them are alive at once
+## and spread over the whole reach, so at the longest aim 110 sat 8 cm apart
+## while each drop is 2-4 cm across - a dotted line. Halving the spacing lets
+## the fan read as continuous water without a tube drawn inside it.
+const SPRAY_COUNT := 220
 ## The end of the hose stub the nozzle's GLB was built with, in the model's own
 ## frame, and the way it runs (car-fixer `tools/make_parts.py`
 ## `build_hose_nozzle`: a 12 mm tube from (0, -0.110, -0.155) to here, joined
@@ -89,12 +93,13 @@ var _model: Node3D
 ## The jackhammer's moil point, which slides along +Z as it hammers.
 var _bit: Node3D
 var _bit_home: Vector3 = Vector3.ZERO
+## The water, and the whole of it: a fan of drops thrown from the nozzle. There
+## used to be a solid rod of cylinders down the middle of it, a tapered
+## near-white tube 24 mm across at the nozzle and 100 mm at the landing, drawn
+## unshaded so it never took the light. It read as a fire hose ("i don't like
+## the solid stream on the water sprayer I just want the spray", the playtest of
+## 2026-09-16), and it is gone: the drops carry the throw on their own.
 var _spray: GPUParticles3D
-## The jet itself: four short segments on a shallow parabola from the nozzle
-## toward where it lands, opening and fading as they go, so the water starts AT
-## the nozzle and FALLS (round 4: drops in mid-air; round 6: a rigid rod).
-var _jet: Node3D
-var _jet_segs: Array[MeshInstance3D] = []
 ## The hose off the nozzle's butt, down to a point below the picture (4.3).
 var _trail: MeshInstance3D
 var _trail_end: Vector3 = Vector3.INF
@@ -189,15 +194,37 @@ const HANDLED := ["rake", "broom", "jointer", "plate"]
 ## (round 10). Where the handle ends is MEASURED off the mesh (its box's far
 ## corner), not typed: the jointer's asset was a build behind its builder and
 ## a typed end stretched it to half way (round 10, found in the frame).
-func aim_handle_at(hands: Vector3) -> void:
-	if _model == null or kind not in HANDLED:
-		return
+## The far end of the handle - where the hands go - in the MODEL's own frame,
+## measured off the Body mesh and never typed (round 10: a typed end stretched
+## the jointer's handle to half way). `Vector3.ZERO` when this tool has no
+## handle worth swinging on.
+func grip_local() -> Vector3:
+	if _model == null:
+		return Vector3.ZERO
 	var body := _model.find_child("Body", true, false) as MeshInstance3D
 	if body == null:
-		return
+		return Vector3.ZERO
 	var box := body.get_aabb()
 	var end := Vector3(0.0, box.end.y, box.position.z)
 	if end.y < 0.05 or end.z > -0.05:
+		return Vector3.ZERO
+	return end
+
+
+## The handle's far end in THIS node's frame, through the model's own transform.
+func grip_point() -> Vector3:
+	var end := grip_local()
+	return _model.transform * end if end != Vector3.ZERO and _model != null else Vector3.ZERO
+
+
+func aim_handle_at(hands: Vector3) -> void:
+	if _model == null or kind not in HANDLED:
+		return
+	var end := grip_local()
+	if end == Vector3.ZERO:
+		return
+	var body := _model.find_child("Body", true, false) as MeshInstance3D
+	if body == null:
 		return
 	var local := _model.to_local(hands)
 	var sy := clampf(local.y / end.y, 0.6, 3.2)
@@ -258,8 +285,6 @@ func spray(on: bool, color: Color = Color(0.62, 0.80, 0.95, 0.8)) -> void:
 		if m != null:
 			m.color = color
 	_spray.emitting = on
-	if _jet != null:
-		_jet.visible = on
 
 
 func spraying() -> bool:
@@ -309,12 +334,27 @@ func stub_world() -> Vector3:
 	return to_global(_stub_local())
 
 
-## The water's centre line - the nozzle, then each jet segment - in world space.
-func jet_points() -> PackedVector3Array:
+## The water's centre line in world space: the nozzle, then five points down the
+## path a drop really flies, from the same numbers the particles are given.
+##
+## It used to be read off the solid rod's segments. With the rod gone the honest
+## line is the ballistic one - and returning fewer points, or one, would have
+## left the smoke's "the hose never crosses the water" check iterating an empty
+## range and passing while measuring nothing.
+func water_line() -> PackedVector3Array:
 	var out := PackedVector3Array()
 	out.append(global_position)
-	for seg in _jet_segs:
-		out.append(seg.global_position)
+	if _spray == null:
+		return out
+	var m := _spray.process_material as ParticleProcessMaterial
+	if m == null:
+		return out
+	var v := (m.initial_velocity_min + m.initial_velocity_max) * 0.5
+	var dir := -global_basis.z.normalized()
+	var g := -m.gravity.y
+	for i in range(1, 6):
+		var t := _spray.lifetime * float(i) / 5.0
+		out.append(global_position + dir * v * t + Vector3.DOWN * 0.5 * g * t * t)
 	return out
 
 
@@ -342,27 +382,9 @@ func set_spray_reach(metres: float) -> void:
 	var v := clampf(metres / maxf(life, 0.05), 3.0, 16.0)
 	m.initial_velocity_min = v * 0.88
 	m.initial_velocity_max = v * 1.08
-	m.spread = clampf(4.0 + metres * 0.5, 4.0, 9.0)
-	if _jet != null:
-		var len := maxf(metres * 0.78, 0.2)
-		# y = -g z^2, dropping a tenth of the reach by the end.
-		var g := 0.10 / len
-		var n := _jet_segs.size()
-		for i in range(n):
-			var z0 := len * float(i) / float(n)
-			var z1 := len * float(i + 1) / float(n)
-			var y0 := -g * z0 * z0
-			var y1 := -g * z1 * z1
-			var seg := _jet_segs[i]
-			var cm := seg.mesh as CylinderMesh
-			cm.height = Vector2(z1 - z0, y1 - y0).length() + 0.01
-			cm.bottom_radius = lerpf(0.012, 0.05, float(i) / float(n))
-			cm.top_radius = lerpf(0.012, 0.05, float(i + 1) / float(n))
-			seg.position = Vector3(0.0, (y0 + y1) * 0.5, (z0 + z1) * 0.5)
-			seg.rotation.x = atan2(z1 - z0, y1 - y0)
-			var mat := cm.material as StandardMaterial3D
-			if mat != null:
-				mat.albedo_color.a = lerpf(0.65, 0.25, float(i) / float(n - 1))
+	# The fan IS the shape now that nothing is drawn down the middle of it: a
+	# 4-9 degree pencil was narrow because the rod carried the line.
+	m.spread = clampf(6.0 + metres * 0.9, 6.0, 15.0)
 
 
 func _process(delta: float) -> void:
@@ -394,7 +416,7 @@ func _build_spray() -> void:
 	_spray.local_coords = false
 	var m := ParticleProcessMaterial.new()
 	m.direction = Vector3(0.0, 0.0, 1.0)
-	m.spread = 7.0
+	m.spread = 9.0
 	m.initial_velocity_min = 3.0
 	m.initial_velocity_max = 3.8
 	m.gravity = Vector3(0.0, -4.0, 0.0)
@@ -414,27 +436,6 @@ func _build_spray() -> void:
 	drop.material = mat
 	_spray.draw_pass_1 = drop
 	add_child(_spray)
-	_jet = Node3D.new()
-	_jet.name = "Jet"
-	_jet.visible = false
-	add_child(_jet)
-	for i in range(4):
-		var seg := MeshInstance3D.new()
-		seg.name = "JetSeg_%d" % i
-		var jb := CylinderMesh.new()
-		jb.top_radius = 0.02
-		jb.bottom_radius = 0.02
-		jb.height = 0.25
-		jb.radial_segments = 8
-		var jm := StandardMaterial3D.new()
-		jm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		jm.albedo_color = Color(0.74, 0.87, 0.98, 0.55)
-		jm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		jb.material = jm
-		seg.mesh = jb
-		seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_jet.add_child(seg)
-		_jet_segs.append(seg)
 
 
 func _build_trail() -> void:

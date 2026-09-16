@@ -30,6 +30,13 @@ const SET_SCRATCH := "user://bc_privacy_settings.json"
 const SAVE_KEYS := ["done", "job", "nth", "places", "rows", "seed", "verb", "version"]
 ## What the settings file may hold.
 const SET_KEYS := ["loudness", "music_on", "version"]
+## Where the one link out of the app goes. Pinned, not pattern-matched: a check
+## that only asks `begins_with("https://")` is green for any address in the
+## world, including one that does not mention this game.
+const POLICY_URL := "https://biglittlejobs.com/privacy"
+## The two files this game writes, which are the two files that policy has to
+## describe. A third name appearing here is a policy change, not a code change.
+const POLICY_FILES := ["user://build_crew_save.json", "user://build_crew_settings.json"]
 ## The licence texts the bundle owes (6.4 part 5).
 const TEXTS := ["res://licenses/Godot-MIT.txt", "res://licenses/Godot-thirdparty.txt",
 	"res://licenses/OFL-Fredoka.txt", "res://licenses/OFL-NunitoSans.txt",
@@ -54,6 +61,7 @@ func _run() -> void:
 	await _the_link_is_gated()
 	_the_save_holds_no_clock()
 	_the_settings_file()
+	_the_policy_knows_the_files()
 	_the_texts_are_here()
 	SaveGame.enabled = true
 	SaveGame.path_override = ""
@@ -95,8 +103,22 @@ func _source_checks() -> void:
 		"exactly one OS.shell_open in the game, in the settings panel (%s)" % ", ".join(opens))
 	_check(network.is_empty(), "and no networking class is ever made (%s)" % ", ".join(network))
 	_check(clocks.is_empty(), "no device id and no wall clock is ever read (%s)" % ", ".join(clocks))
-	_check(not bool(ProjectSettings.get_setting("debug/file_logging/enable_file_logging", false)),
+	# `get_setting` does NOT apply feature tags; `get_setting_with_override` is
+	# what the ENGINE reads. The difference is not academic: the base default is
+	# false and the `.pc` default is true, so this check was green on every
+	# desktop run while `user://logs/` filled with a timestamped file per launch.
+	_check(not bool(ProjectSettings.get_setting_with_override("debug/file_logging/enable_file_logging")),
 		"and the engine writes no diagnostic log")
+	# Said again as a fact about the disk, because a setting is a promise and a
+	# directory is evidence. Nothing but the two files the policy names, and the
+	# scratch files this probe is standing in for them, may be in `user://`.
+	var strays: Array[String] = []
+	for name: String in DirAccess.get_directories_at("user://"):
+		if name in ["shader_cache", "vulkan", "objectdb_snapshots"]:
+			continue
+		strays.append(name + "/")
+	_check(strays.is_empty(),
+		"and nothing is writing a folder beside the child's two files (%s)" % ", ".join(strays))
 
 
 ## Apple's rule for the Kids Category: the gate in front of the link must be a
@@ -153,7 +175,7 @@ func _the_link_is_gated() -> void:
 			await _frames(3)
 			var link := (panel.get("_panel") as Control).get_node_or_null("Privacy") as Control
 			_check(link != null and link.visible, "%s: the privacy link is on it" % scene.get_file())
-			_check(String(panel.get("privacy_url")).begins_with("https://"),
+			_check(String(panel.get("privacy_url")) == POLICY_URL,
 				"%s: pointing at the published policy (%s)" % [scene.get_file(), str(panel.get("privacy_url"))])
 			var gate: CanvasItem = panel.get("_gate")
 			_check(gate != null and not gate.visible,
@@ -216,6 +238,18 @@ func _the_settings_file() -> void:
 	Settings.clear()
 	_check(not FileAccess.file_exists(Settings.file_path()), "and they can be taken away")
 	Settings.path_override = ""
+
+
+## The policy names files by name. If this game starts writing a third one, the
+## published document is wrong the moment it ships - so the list is pinned here,
+## beside the keys, and a new file breaks this probe rather than the promise.
+func _the_policy_knows_the_files() -> void:
+	print("-- the files the policy has to describe")
+	var names := [SaveGame.FILE, Settings.FILE]
+	names.sort()
+	var want := POLICY_FILES.duplicate()
+	want.sort()
+	_check(names == want, "the game writes exactly the two files the policy lists (%s)" % str(names))
 
 
 func _the_texts_are_here() -> void:

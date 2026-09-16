@@ -282,6 +282,11 @@ var pour_band_from: float = -INF
 var drag_tool_at: Vector3 = Vector3.INF
 ## Where the plate compactor stands on the base (5.1), INF before its phase.
 var _plate_at: Vector3 = Vector3.INF
+## Seconds of REAL work the plate has done in this beat - the clock that ends
+## the phase (`SiteVerbs.compact_base`, `SiteConfig.pack_seconds`). Read by the
+## smoke so the timing can be asserted whatever else the run spent its frames
+## on; only frames where the finger is really on the plate raise it.
+var pack_worked: float = 0.0
 var _plate_view: Marker3D
 ## How high the plate rides on loose stone before the patch under it is packed.
 const PLATE_RIDE := 0.02
@@ -828,8 +833,10 @@ func pose(stage: String, step: int = -1, done: int = 0, places: Array = [], play
 					skid_d.place(Vector3(drive.lane_drive_x(done + 1), 0.0, Driveway.Z_APRON - config.garage_stand), 0.0)
 					skid_d.global_position.y = _ground_y(skid_d.global_position)
 			"compact_base":
-				for b in range(1, done + 1):
-					drive.pack_bay(b)
+				# One beat over the whole base since 2026-09-16: done at all means
+				# every bay of it, not the first `done` bays.
+				if done >= 1:
+					drive.pack_all()
 			"form_strip":
 				if not places.is_empty():
 					_apply_places(posed.verb, places, done)
@@ -952,15 +959,14 @@ func _pose_tool(step: JobStep) -> void:
 			if spot != null:
 				t.hover_instant(spot.global_position, Vector3.DOWN, Vector3.FORWARD)
 		"stake_drive":
-			# Wound up over the painted cap of the first stake still standing,
-			# as the verb holds it before the fall (4.2).
+			# The same helper the row's own opening uses, so the posed picture and
+			# play cannot drift apart again. They had: this pose was right and
+			# play was wrong, and the user saw it.
 			var open_s := drive.open_stakes_in(drive.current_stake_group())
 			var si: int = open_s[0] if not open_s.is_empty() else 1
 			if not drive.stake_is_in(si):
 				drive.set_stake(si, 0.0)
-			var sh := drive.stake_home(si)
-			t.hover_instant(Vector3(sh.x, drive.stake_cap(si).y + Driveway.STAKE_CAP * 0.5 + config.sledge_lift, sh.z),
-				Vector3.DOWN, Vector3.FORWARD)
+			hold_sledge(t, si, 1.0, 0.0)
 		"spray_water":
 			# In the hands, aimed at the driest patch, through the verb's own
 			# helper: it was parked in WORLD space over the far slab with a
@@ -989,11 +995,10 @@ func _pose_tool(step: JobStep) -> void:
 			t.aim_handle_at(jh)
 			t.align_head(Vector3.RIGHT)
 		"compact_base":
-			var pbay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
-			set_plate_view(drive.plate_start(pbay))
+			set_plate_view(drive.plate_start(1))
 			if args_shot_is(CameraRig.PLATE):
 				rig.snap(CameraRig.PLATE, _plate_view)
-			hold_plate(t, drive.plate_start(pbay), pbay, false)
+			hold_plate(t, drive.plate_start(1), 1, false)
 		"broom_finish":
 			var bay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
 			var band := drive.bay_range(bay)
@@ -2500,6 +2505,12 @@ func _notification(what: int) -> void:
 				runner.hold(false)
 		if hud != null:
 			hud.release_pads()
+	# Coming BACK is the other half. An iOS app is suspended, not killed, so a
+	# parent who went to Accessibility and turned Reduce Motion on while the
+	# child waited returns to this same process: the answer read at launch is
+	# stale, and nothing else would ever ask again.
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_UNPAUSED:
+		Settings.forget_motion()
 
 
 ## Did a tap at `at` land on the thing the arrow is pointing at (DESIGN 0)?
@@ -2626,10 +2637,18 @@ func arm_rings(step: JobStep, done: int) -> void:
 	# after every beat at the point the beat walked it to - never on the lawn at
 	# its rest, and never popping (5.1).
 	if step.verb == "compact_base":
-		var pbay := clampi(done + 1, 1, drive.bay_count())
 		if done == 0 or _plate_at == Vector3.INF:
-			set_plate_view(plate_at(pbay))
-		hold_plate(tool_node("plate"), plate_at(pbay), pbay, false)
+			set_plate_view(plate_at(0))
+		hold_plate(tool_node("plate"), plate_at(0), 0, false)
+	# The sledge waits wound up over the next peg at EVERY done, including 0 -
+	# a posed or resumed row has to open on the same picture a fresh one does,
+	# which is the drift the 2026-09-16 playtest found. `arm_rings` does this
+	# for a row that opens in play; this is the same thing for a row that is
+	# posed into place, where the pegs are made live after the rings are armed.
+	if step.verb == "stake_drive":
+		var pegs_open := drive.open_stakes_in(drive.current_stake_group())
+		if not pegs_open.is_empty():
+			hold_sledge(tool_node("sledge"), pegs_open[0], 1.0, 0.0)
 	var points: Array[Vector3] = []
 	var ids := PackedInt32Array()
 	var size := 0.0
@@ -2673,11 +2692,19 @@ func arm_rings(step: JobStep, done: int) -> void:
 			for j in range(1, drive.stake_count() + 1):
 				if not drive.stake_is_in(j) and not drive.stake_shown(j) and drive.stake_live(j):
 					drive.set_stake(j, 0.0)
-			for i in drive.open_stakes_in(drive.current_stake_group()):
+			var up_pegs := drive.open_stakes_in(drive.current_stake_group())
+			for i in up_pegs:
 				# ON the painted cap, which is what the sledge lands on (4.2).
 				points.append(drive.stake_cap(i))
 				ids.append(i)
 			size = config.ring_stake
+			# And the sledge stands WOUND UP over the first of them, from the
+			# moment the row opens - the raised hammer is the invitation, and the
+			# child taps the peg to bring it down (2026-09-16). It used to lie on
+			# the lawn until the tap and then fly in, so the tap was answered by
+			# a tool arriving instead of by a blow.
+			if not up_pegs.is_empty():
+				hold_sledge(tool_node("sledge"), up_pegs[0], 1.0, config.tool_fly_time)
 		"rebar_lay":
 			# The group being laid: the four long bars, then a pair of cross bars.
 			# Its bars wait in the air over their places while their rings are lit,
@@ -2831,7 +2858,7 @@ func drag_hint(verb: String) -> Vector3:
 		return drag_tool_at
 	match verb:
 		"compact_base":
-			return plate_at(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
+			return plate_at(0)
 		"screed_pull":
 			var z := _screed_view.position.z if _screed_view != null else Driveway.Z_APRON
 			return Vector3(Driveway.CENTRE_X, Driveway.GRADE, z + 0.35)
@@ -2852,8 +2879,9 @@ func _hint_swipe_axis() -> Vector2:
 	if s != null and (s.verb == "screed_pull" or s.verb == "broom_finish"):
 		return Vector2.DOWN
 	if s != null and s.verb == "compact_base" and hud != null and drive != null and drag_tool_at != Vector3.INF:
-		# From the plate toward the patch of its bay still loose.
-		var band := drive.bay_range(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
+		# From the plate toward the patch of the BASE still loose - the whole of
+		# it, since the beat is no longer penned into one bay.
+		var band := Vector2(Driveway.Z_APRON, Driveway.Z_KERB)
 		var fr := get_viewport().get_visible_rect().size
 		var a := hud.project_into(fr, drag_tool_at)
 		var b := hud.project_into(fr, drive.least_packed_in(band.x, band.y))
@@ -2886,6 +2914,63 @@ func hold_hose(t: HandTool, at: Vector3) -> void:
 	t.hover_instant(hold, (at + Vector3.UP * reach * 0.09 - hold).normalized(), Vector3.UP)
 	t.set_spray_reach(reach)
 	t.trail_to(hand_hold(config.hose_trail))
+
+
+## The sledge on its swing over peg `i`: `k` 1 is wound up and waiting, 0 is the
+## face on the cap. One helper for the beat, for the row opening and for the
+## posed picture, so the three cannot drift - which is exactly what they had
+## done. The screenshots showed the hammer up over the peg; play flew it in
+## from the lawn AFTER the tap and dropped it straight down. The user played the
+## game and saw the difference ("it swings up and waits for the child to touch
+## the stake and then it swings down to hit it", 2026-09-16).
+##
+## It SWINGS: the head travels on an arc about the hands, in the plane of the
+## board the peg stands against, instead of translating vertically with a fixed
+## basis. `seconds` 0 puts it there now; anything else flies it.
+func hold_sledge(t: HandTool, i: int, k: float, seconds: float) -> void:
+	if drive == null or t == null or i < 1:
+		return
+	var home := drive.stake_home(i)
+	var rest := Vector3(home.x, drive.stake_cap(i).y + Driveway.STAKE_CAP * 0.5, home.z)
+	# Which way along the board the handle lies decides which way the head winds
+	# UP - it rises away from the hands. Leaning it the first way put the head
+	# inside the dark garage doorway, reading as a pole in a hole; it is chosen
+	# so the head comes up over the OPEN drive, where the camera for this pair
+	# already is, and the arc crosses the picture instead of going into it.
+	var lie := drive.stake_along(i)
+	var eye: Vector3 = camera.global_position if camera != null else rest + Vector3.BACK
+	if lie.dot(eye - rest) > 0.0:
+		lie = -lie
+	var down := t.pose(rest, Vector3.DOWN, lie)
+	var grip: Vector3 = t.grip_point()
+	if grip == Vector3.ZERO:
+		# No handle to swing on: the old straight lift, so nothing breaks.
+		t.hover_instant(rest + Vector3.UP * config.sledge_lift * clampf(k, 0.0, 1.0),
+			Vector3.DOWN, lie)
+		return
+	var pivot: Vector3 = down * grip
+	var r := rest.distance_to(pivot)
+	var deg := asin(clampf(config.sledge_lift / maxf(r, 0.01), 0.0, 0.98))
+	# UP x handle, not handle x UP: the other way round swings the head DOWN
+	# through the ground and toward the garage (measured, not guessed).
+	var axis := Vector3.UP.cross(pivot - rest)
+	if axis.length() < 0.001:
+		axis = Vector3.RIGHT
+	var b := Basis(axis.normalized(), deg * clampf(k, 0.0, 1.0))
+	var to := Transform3D(b * down.basis, pivot + b * (rest - pivot))
+	if seconds > 0.0:
+		t.fly_to(to, seconds, 0.0)
+	else:
+		t.snap_to(to)
+
+
+## Is the sledge already standing over peg `i`? Then the blow starts in the frame
+## the finger lands and nothing has to be carried across.
+func sledge_over(t: HandTool, i: int) -> bool:
+	if t == null or drive == null or i < 1:
+		return false
+	var home := drive.stake_home(i)
+	return Vector2(t.global_position.x - home.x, t.global_position.z - home.z).length() < 0.45
 
 
 ## The plate compactor standing on the base at `at`, its handle running to the
@@ -2931,10 +3016,12 @@ func plate_hands() -> Vector3:
 func plate_at(b: int) -> Vector3:
 	if drive == null:
 		return Vector3.INF
-	var band := drive.bay_range(b)
+	# `b <= 0` is the whole base: where the plate stands if it is anywhere on it,
+	# else the garage end, where a crew starts.
+	var band := Vector2(Driveway.Z_APRON, Driveway.Z_KERB) if b <= 0 else drive.bay_range(b)
 	if _plate_at != Vector3.INF and _plate_at.z >= band.x and _plate_at.z <= band.y:
 		return _plate_at
-	return drive.plate_start(b)
+	return drive.plate_start(maxi(b, 1))
 
 
 func work_point(plane_y: float = 0.0) -> Vector3:
@@ -3066,7 +3153,7 @@ func _process(delta: float) -> void:
 					"compact_base":
 						# ON the plate, or a stick could never pick it up.
 						_cursor = drag_tool_at if drag_tool_at != Vector3.INF \
-							else drive.plate_start(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
+							else drive.plate_start(1)
 					_:
 						_cursor = drive.driest_world()
 				_cursor_from_stick = true
@@ -3075,12 +3162,10 @@ func _process(delta: float) -> void:
 				Driveway.CENTRE_X + Driveway.WIDTH * 0.5)
 			_cursor.z = clampf(_cursor.z, Driveway.Z_APRON, Driveway.Z_KERB)
 			if s.verb == "compact_base" and drag_tool_at != Vector3.INF:
-				# Kept a hand's width from the plate and inside its bay: a stick
-				# cursor that ran ahead at 2.6 m/s lost the plate's grab, and one
-				# left in the last bay never picked the plate up in the next.
+				# Kept a hand's width from the plate, and on the base: a stick
+				# cursor that ran ahead at 2.6 m/s lost the plate's grab.
 				var off := Vector3(_cursor.x - drag_tool_at.x, 0.0, _cursor.z - drag_tool_at.z).limit_length(0.4)
-				_cursor = drive.clamp_plate(Vector3(drag_tool_at.x + off.x, 0.0, drag_tool_at.z + off.z),
-					clampi(runner.done_in_step + 1, 1, drive.bay_count()))
+				_cursor = drive.clamp_plate(Vector3(drag_tool_at.x + off.x, 0.0, drag_tool_at.z + off.z), 0)
 			runner.hold(true)
 		elif _cursor_from_stick:
 			# The stick let go: hand the beat back to the finger and stop working.
@@ -4056,12 +4141,15 @@ func _end_opening() -> void:
 		rig.go(s.shot, runner.shot_anchor(s.shot), config.opening_ease)
 
 
-## Eases 0..1 over `seconds`, calling `on_k` every frame.
+## Eases 0..1 over `seconds`, calling `on_k` every frame - and standing still
+## while the tree is paused, for the reason `SiteVerbs._dt` gives at length:
+## `process_frame` is emitted behind a settings panel, `_process` is not.
 func _tween_over(seconds: float, on_k: Callable) -> void:
 	var t := 0.0
 	var total := maxf(seconds, 0.05)
 	while t < total:
-		t = minf(t + get_process_delta_time(), total)
+		var dt := 0.0 if (get_tree() == null or get_tree().paused) else get_process_delta_time()
+		t = minf(t + dt, total)
 		var k := t / total
 		on_k.call(k * k * (3.0 - 2.0 * k))
 		await get_tree().process_frame
@@ -4274,10 +4362,12 @@ func resume(point: Dictionary) -> void:
 			# The song is down for the evening, where the cure left it.
 			if sfx != null:
 				sfx.fade_music(-30.0, 0.05)
-	# Mid-row, the hammer or the sledge stands wound up over the next place, as the
-	# verb's own pose has it: left on the lawn, the next blow jumped it a metre
-	# and a half in a frame (the session-6 verification pass).
-	if done > 0 and (s.verb == "jack_spot" or s.verb == "stake_drive"):
+	# Mid-row the breaker stands over the next place, as the verb's own pose has
+	# it: left on the lawn, the next blow jumped it a metre and a half in a frame
+	# (the session-6 verification pass). The SLEDGE needs no guard and no `done`
+	# - `arm_rings` stands it wound up over the next peg from the moment the row
+	# opens, at done 0 too, which is the whole point of the 2026-09-16 change.
+	if done > 0 and s.verb == "jack_spot":
 		_pose_tool(s)
 	# The pour, the come-along, every drag and the back-ins open on their OWN
 	# shot. A finger pressed during the opening's swoop would be read through a

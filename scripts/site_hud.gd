@@ -655,7 +655,12 @@ func _aim_screen(world: Vector3) -> void:
 		_hint_dir_for = world
 		_aim_dir = Vector2.UP
 		var reach := _aim_touch + _aim_size * hint_scale * (HintArrow.BACK + HintArrow.BACK_OFF)
-		if at.y - reach < safe.position.y + hint_margin:
+		# `safe` is ALREADY grown by `hint_margin`, so adding it again here counted
+		# the margin twice and flipped the mime below its target a whole margin
+		# earlier than it used to - on every screen, notch or no notch. Before
+		# 6.4 this read `at.y - reach < hint_margin`; `safe.position.y` is that
+		# same line with the hardware's inset added, which is all that changed.
+		if at.y - reach < safe.position.y:
 			_aim_dir = Vector2.DOWN
 	_aim_at = at
 

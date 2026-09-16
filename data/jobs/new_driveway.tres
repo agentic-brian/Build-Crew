@@ -173,9 +173,9 @@ target = "Slab"
 verb = "compact_base"
 tool = "plate"
 shot = "PLATE"
-count = 3
+count = 1
 sound = ""
-progress_weight = 2
+progress_weight = 6
 
 ; 8c. CLOSE THE FORM (decision 5). The kerb board, from the road, now the
 ;     trucks that backed through that end have gone...
