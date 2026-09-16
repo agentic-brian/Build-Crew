@@ -19,6 +19,18 @@ extends Resource
 ## The beats, in order.
 @export var steps: Array[JobStep] = []
 
+## The rectangle this job is poured into (6.5). A job that names none is poured
+## into the driveway's own 3.6 x 9.0 at x 2.6 - `SlabSpec`'s defaults - which is
+## what every job did before there was more than one.
+@export var slab: SlabSpec = null
+
+
+## This job's rectangle, or the driveway's if it names none. Never null, because
+## the caller pushes it UNCONDITIONALLY: a level that skipped the push would
+## inherit the shape of whatever level stood in this process before it.
+func slab_spec() -> SlabSpec:
+	return slab if slab != null else SlabSpec.driveway()
+
 
 ## The wheel this job is about, from `arrives_with` (`flat_fl` -> `FL`). Jobs
 ## that are not about a wheel still answer FL, which is the corner every camera

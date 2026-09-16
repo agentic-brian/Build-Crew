@@ -180,6 +180,16 @@ func _the_setup() -> void:
 		"the bar is set to this job's %d stops (%d)" % [main.job.total_weight(), hud.total_steps()])
 	_check(main.job.total_weight() == TOTAL_STOPS,
 		"and the job is %d stops long, weighted by the child's minutes (%d)" % [TOTAL_STOPS, main.job.total_weight()])
+	# The slab's rectangle comes from the JOB now (6.5), not from constants -
+	# and `Driveway`'s fields are static, so they are process-global. What is
+	# standing has to be THIS job's, not whatever level stood here before it.
+	var spec0: SlabSpec = main.job.slab_spec()
+	_check(spec0 != null and spec0.is_live(),
+		"the slab standing is this job's own rectangle, %.1f x %.1f at x %.1f on a %d x %d grid (%s)"
+		% [spec0.width, spec0.z_kerb - spec0.z_apron, spec0.centre_x, spec0.cells_x,
+			spec0.cells_z, str(SlabSpec.live())])
+	_check(absf(Driveway.WIDTH - 3.6) < 0.001 and absf(Driveway.LENGTH - 9.0) < 0.001 		and Driveway.CELLS_X == 6 and Driveway.CELLS_Z == 12,
+		"and it is still the driveway's own 3.6 x 9.0 on 6 x 12, the numbers every earlier frame was taken at")
 	# The job OPENS on the wide (the plan's 3.1): the house, the cracked drive,
 	# the tools, and the first slab's three rings lit in it.
 	_check(main.rig.current_shot() == CameraRig.WIDE, "the job opens on the WIDE")

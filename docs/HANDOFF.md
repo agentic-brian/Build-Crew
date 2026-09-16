@@ -1,4 +1,4 @@
-# Build Crew - hand-off (written 2026-09-16, after session 8 and the playtest)
+# Build Crew - hand-off (written 2026-09-16, after the export pass and the slab spec)
 
 For whichever session picks this up next. Everything below is true as of the
 date above; the code and `docs/critic_log.md` outrank this file if they
@@ -30,7 +30,15 @@ disagree.
   `TITLE_PROBE PASS 62/62`, `SWITCH_PROBE PASS 18/18`, `MACHINE_PROBE PASS
   20/20`, `SETTINGS_PROBE PASS 24/24`, `PRIVACY_PROBE PASS 31/31`,
   `SAFE_AREA PASS 23/23` (run twice, once per device shape), `MOTION_PROBE
-  PASS 16/16` and `EXPORT_PROBE PASS 25/25`. (The resume probe has six checks
+  PASS 16/16` and `EXPORT_PROBE PASS 25/25` - and after the slab spec,
+  `SITE_SMOKE 494/494` and `TITLE_PROBE 66/66`.
+- **6.5 IS STARTED: the slab spec is built** (`DESIGN.md` 7i). A job carries its
+  own rectangle (`scripts/slab_spec.gd`, `JobDef.slab`), pushed UNCONDITIONALLY
+  at `SiteMain._enter_tree`; `Driveway`'s nine rectangle constants are
+  `static var` now, so all 782 reads kept working and no call site moved.
+  `GRADE`, `BASE_TOP` and `DIG` stay `const` - they are levels, not the
+  rectangle. **The flag itself is NOT built**, and on the survey's evidence it
+  is four to five more sessions; the plan's 6.5 lists what is left. (The resume probe has six checks
   fewer than session 8's 321 because the compaction is one beat now, not three.)
 - **THE EXPORT PASS IS BUILT** (6.4 part 4, `DESIGN.md` 7h): `export_presets.cfg`
   with an iOS and a Windows preset, bundle id `com.biglittlejobs.buildcrew`,
@@ -258,6 +266,22 @@ Run everything from `build-crew/` (`--path .`).
   yellow in it. A resumed row opens on its own shot wherever a press during an
   eye swoop would move work (drags) or the subject is off the wide (back-ins).
 
+- **`Driveway`'s rectangle is PROCESS-GLOBAL now.** It is `static var` so that no
+  call site had to move, which means two slabs of different shapes cannot exist
+  in one process, and a level that forgets to push its spec inherits the last
+  one's. `SiteMain._enter_tree` pushes it unconditionally for exactly that
+  reason; never make that push conditional. The smoke and the title probe both
+  assert the driveway's numbers survive a NEXT and a backdrop.
+- **A green suite cannot prove a new field is READ.** The slab spec's defaults
+  are today's numbers, so all 494 checks pass whether the field is live or dead.
+  Prove a field like that by giving it a wrong value and watching the geometry
+  move, then putting it back - the same discipline as watching a regression test
+  fail.
+- **The title's backdrop must stand the job the SAVE is for.** It loads
+  `new_driveway` by default and `SiteMain.resume` refuses another job's
+  document, so `_mode` fell to "fresh" and the save was cleared: the first child
+  to save a second job would have lost it. Fixed, and the title probe stages a
+  real second job on disk to hold it.
 - **A test that plays better than any child can will never find a phase a child
   cannot finish.** The smoke walked a flawless four-lane boustrophedon over every
   bay, so it passed the compaction the user could not get past. When a rule is a

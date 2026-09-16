@@ -117,9 +117,32 @@ func _place_lot(last: int, pinned: int) -> void:
 		inst.dress_stage = "old"
 		inst.dress_shot = "WIDE"
 		inst.dress_from_save = SaveGame.enabled and SaveGame.exists()
+		# The backdrop has to judge the save against the job the save is FOR.
+		# It loads `new_driveway` by default, and `SiteMain.resume` refuses a
+		# document whose "job" is not the one it loaded - so the moment there is
+		# a second job, a child who saved a sidewalk flag would come back to a
+		# driveway backdrop that says "nothing to resume", and the line below
+		# would throw their job away with nothing on the screen touched.
+		var saved := _saved_job()
+		if saved != "":
+			inst.job_name = saved
 	add_child(inst)
 	move_child(inst, 0)
 	_lot = inst
+
+
+## Which job the save on disk is for, or "" if there is no save, no store, or no
+## job file of that name any more. Read WITHOUT resuming anything: the backdrop
+## needs the name before it builds, and a save naming a job this build no longer
+## ships must not stop the title row coming up.
+func _saved_job() -> String:
+	if not SaveGame.enabled or not SaveGame.exists():
+		return ""
+	var doc := SaveGame.load_data()
+	var name := String(doc.get("job", ""))
+	if name == "":
+		return ""
+	return name if ResourceLoader.exists(JobIcons.JOBS_DIR + name + ".tres") else ""
 
 
 ## A job's disc: start the drive the child is looking at, or carry on the one

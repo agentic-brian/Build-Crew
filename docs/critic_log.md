@@ -3136,3 +3136,124 @@ a deploy, so it is written down here and in the plan rather than done quietly.
 
 **Green: `EXPORT_PROBE PASS 25/25`, and the rest of the suite unmoved by any of
 it (2026-09-16).**
+
+# 6.5, session one (2026-09-16): the slab stops being the driveway
+
+The plan's 6.5 is "the next jobs", and its first line is the one that matters:
+"the slab's rectangle becomes a Slab spec (centre, width, length, cells) instead
+of constants." This session did exactly that and nothing else, on purpose — the
+whole safety of the change is that **nothing moved**, and the moment a session
+also has to produce a new picture, that stops being a criterion anyone can check.
+
+## The number was scary and most of it was not real
+
+A survey counted 782 code references to the twelve constants in `driveway.gd`.
+Classified honestly, the shape changed:
+
+| what they are about | refs |
+|---|---|
+| the slab's RECTANGLE (`WIDTH`, `LENGTH`, `CENTRE_X`, `Z_APRON`, `Z_KERB`, `CELLS_X`, `CELLS_Z`) | 584 |
+| the old slab's PANELS | 15 |
+| LEVELS (`GRADE`, `BASE_TOP`, `DIG`) | 183 |
+
+The 183 are not part of this at all. Grade is 0.0 by definition of finished
+grade, and a sidewalk flag is the same 100 mm slab on the same 100 mm base as a
+driveway — those three are the same numbers for any slab a child pours, so they
+stay `const` and say so in the code. Twenty-three per cent of the frightening
+number evaporated on the first honest look.
+
+Of what was left, only **29 references are about the LOT rather than the slab**,
+and they are exactly where you would expect: the lawn, the kerb, the footway and
+the crossing are all cut AROUND the drive, and the garage's front face IS
+`Z_APRON`. Every one of those stays correct for a flag, because the driveway is
+still a permanent feature of that street — which is the argument for the
+sidewalk flag being the right second job, made in code rather than in prose.
+
+## Nine keywords, and no call site touched
+
+`const` became `static var` on the nine rectangle constants. GDScript reads a
+static var both as a bare name inside the class (448 internal uses) and as
+`Driveway.WIDTH` from outside it (334 external), and lets it be assigned at run
+time — so all 782 references keep working verbatim. It is already this project's
+idiom, not a trick: `SaveGame.enabled` is a static var the smoke writes across
+the class boundary, and `settings.gd` even carries a SCREAMING_CASE one.
+
+The spec rides in on a seam that already existed and had already been used once:
+`SiteMain._enter_tree` loads the JobDef and then pushes `crack_base` into the
+Driveway before the Driveway builds itself in its own `_ready` (session 6 proved
+that seam). `SlabSpec.apply()` goes in beside it.
+
+**Unconditionally**, and that word is the whole design. A static field is
+process-global, and this project keeps a list of the bugs that come from that —
+the hand-off's own "process-global switches must be put back". A level that
+pushed only when its job named a spec would quietly inherit the shape of
+whichever level stood in the process before it: the title row's backdrop, or the
+job before a NEXT. So a job with no spec pushes the driveway's defaults, which
+is the same thing said out loud. The defaults are literals in `SlabSpec`, never
+read back off `Driveway`, so they cannot drift either.
+
+## The test a green suite could not be
+
+The refactor's safety argument — the defaults are today's numbers, so nothing
+can move — makes the whole 492-check suite a very strong test of the refactor
+and a completely empty test of the spec. **A field read by nobody passes
+492/492 exactly as well as one read by everybody.**
+
+So the field was proved live the only way it can be: give it a different
+rectangle and watch the slab move.
+
+```
+JOB SPEC          centre_x=2.60 z=-3.40..5.60 width=3.60 cells=6x12
+AT THE JOB'S SPEC pad 3.76 x 9.16 at x 2.60   cells 72
+AT A FLAG'S SPEC  pad 1.96 x 3.16 at x -4.00  cells 12
+PUT BACK          true (pad 3.76 x 9.16)
+```
+
+Two new checks keep it that way where it can actually go wrong: the smoke
+asserts the rectangle standing is **this job's own**, and the title probe
+asserts that after a backdrop has been and gone the numbers are still the
+driveway's.
+
+## And a save-losing bug, found before it could arm
+
+The survey turned one up that had nothing to do with the rectangle and
+everything to do with a second job existing at all.
+
+The title's backdrop loads `new_driveway` unless it is told otherwise.
+`SiteMain.resume` refuses a save document whose `job` is not the one it loaded.
+And `TitleMain` clears the save when the level says there is nothing to resume.
+Chain them: **a child saves a sidewalk flag, quits, comes back — and the
+driveway backdrop says "nothing to resume", so their job is thrown away with
+nothing on the screen touched.** It is the same shape as session 8's held "new
+drive" disc surviving a pause, and it would have armed the instant `jobs.json`
+grew a second line.
+
+The backdrop reads the save's own job name now, before it builds. Proved both
+ways, because a fix nobody has watched fail is not a fix: with a real second job
+staged on disk and a save pointing at it, the title comes up in `carry_on` and
+the save survives; with the fix switched off, `save still there=false`. It is a
+permanent check in the title probe now, staging and removing its own scratch job.
+
+## What this session deliberately did NOT do
+
+The plan's sentence — "the one real change unlocks every later job" — understates
+the rest of the flag. Still ahead, and named here so the next session does not
+rediscover them: the four-board form list and `count := [4, 4, 2, 0]`, the
+literal `KERB_BOARD`, `joint_count()` returning a hard 2 (a three-metre flag
+came out with three bays in the probe above, which is the next thing to fix),
+the twelve bars that must become a mesh sheet, a hole in the footway for the
+flag to sit in, an intact scenery driveway drawn while the `Driveway` node is
+something else, a crossing payoff, the two-part seat picture the session-7 log
+asked for, and a suite whose 433 checks are written in the driveway's own
+vocabulary.
+
+**On the evidence, the sidewalk flag is four to five sessions with this as the
+first, not one session with a refactor in it.** That is not an argument against
+it — it is the right second job for exactly the reason the plan gives — it is an
+argument against promising it in one.
+
+**Green: `SITE_SMOKE PASS 494/494`, `TITLE_PROBE PASS 66/66`,
+`RESUME_PROBE PASS 315/315`, `SWITCH_PROBE PASS 18/18`,
+`MACHINE_PROBE PASS 20/20`, `SETTINGS_PROBE PASS 24/24`,
+`PRIVACY_PROBE PASS 31/31`, `SAFE_AREA PASS 23/23` (both shapes),
+`MOTION_PROBE PASS 16/16`, `EXPORT_PROBE PASS 25/25` (2026-09-16).**

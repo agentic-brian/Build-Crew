@@ -999,3 +999,41 @@ the contract:
   Garage and describes neither of the two files this game writes. The parental
   gate opens a document that does not name this app, which is the one thing the
   gate exists to make good. It lives in the marketing site's own repository.
+
+### 7i. The slab spec (2026-09-16): the slab stops being the driveway
+
+- **A job carries its own rectangle** (`scripts/slab_spec.gd`, `JobDef.slab`).
+  Centre, the two ends, width, the fill grid and the old slab's panels. What it
+  deliberately does NOT carry is `GRADE`, `BASE_TOP` and `DIG`: those are
+  LEVELS, not the rectangle - grade is 0.0 by definition of finished grade, and
+  a sidewalk flag is the same 100 mm slab on the same 100 mm base as a driveway.
+  183 of the 782 references to `Driveway`'s constants are those three, and not
+  one of them is a thing a job can differ in.
+- **The nine rectangle constants are `static var`, not `const`.** GDScript reads
+  a static var both as a bare name inside the class and as `Driveway.WIDTH` from
+  outside it, and lets it be assigned at run time - so all 782 existing reads
+  keep working verbatim and no call site moved. It is this project's own idiom:
+  `SaveGame.enabled` is a static var the smoke writes across the class boundary.
+- **It is pushed at the seam `crack_base` already used** - `SiteMain._enter_tree`,
+  before the Driveway builds itself in its own `_ready` - and it is pushed
+  **UNCONDITIONALLY**. A static field is process-global; a level that pushed only
+  when its job named a spec would inherit the shape of whichever level stood in
+  the process before it (the title's backdrop, or the job before a NEXT). A job
+  with no spec pushes the driveway's defaults, and those defaults are literals in
+  `SlabSpec` rather than a read-back off `Driveway`, so they cannot drift either.
+- **The limit, stated:** two slabs of different shapes cannot exist in one
+  process. Nothing wants that today - the title row's backdrop is the only second
+  level and it stands alone - and the day a job needs a driveway AND a flag on
+  screen at once, this becomes instance state and 782 call sites move with it.
+- **A green suite cannot prove a spec is read.** The defaults are today's
+  numbers, so the whole suite passes whether the field is live or dead. It is
+  proved by giving it a different rectangle and watching the slab move (72 cells
+  to 12, 6.6 m across the lot), then putting it back. The permanent guards are
+  the two places the process-global can actually go wrong: the smoke asserts the
+  rectangle standing is this job's own, and the title probe asserts a backdrop
+  that has been and gone left the driveway's numbers behind it.
+- **The backdrop stands the job the SAVE is for.** `TitleMain` reads the save's
+  job name before it builds the lot. Without it the backdrop always loaded
+  `new_driveway`, `SiteMain.resume` refused any other job's document, `_mode`
+  fell to "fresh" and the save was cleared - so the first child to save a second
+  job would have lost it on the next launch, with nothing on the screen touched.

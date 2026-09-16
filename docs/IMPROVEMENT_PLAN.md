@@ -910,6 +910,17 @@ and shipping it means rebuilding and deploying that site.
    bit's stroke still move, only the camera does not.
 
 ### 6.5 The next jobs, judged (L each)
+**STARTED 2026-09-16. The slab spec - "the one real change" below - is BUILT and
+green; the flag itself is not.** A survey of the real surface put the sidewalk
+flag at four to five sessions with the refactor as the first of them, not one
+session with a refactor in it, and the plan's own sentence understates what is
+left: the four-board form list and `count := [4, 4, 2, 0]`, the literal
+`KERB_BOARD`, `joint_count()` returning a hard 2, the twelve bars that must
+become a mesh sheet, a hole in the footway, an intact scenery driveway drawn
+while the `Driveway` node is something else, a crossing payoff, the two-part
+seat picture, and a suite whose 433 checks are written in the driveway's own
+vocabulary. See the critic log's "6.5, session one" for the numbers.
+
 Judged by: reuses the verbs and machines already built, teaches something
 new, is a place-based job a child can do. No town, no currency, no economy.
 
@@ -923,6 +934,13 @@ new, is a place-based job a child can do. No town, no currency, no economy.
    the car drives over the crossing. The one real change unlocks every later
    job: the slab's rectangle becomes a Slab spec (centre, width, length,
    cells) instead of constants. A three-year-old finishes this one.
+   **The Slab spec is DONE (2026-09-16):** `scripts/slab_spec.gd`, carried by
+   `JobDef.slab`, pushed unconditionally at `SiteMain._enter_tree`, with the
+   nine rectangle constants now `static var` so no call site had to move. The
+   flag's own geometry, beats and seat are the sessions after it. The footway is
+   already two boxes either side of the drive, 1.4 m deep at `KERB_Z - 0.7`,
+   split at the drive's width - which is what makes the plan's "TWO boards"
+   honest, and what sets the 1.5 m screed.
 2. **The fence-post footing** - the smallest job, and the first beat where
    the child sets something STRAIGHT: pull the leaning post, auger the hole
    (a jackhammer-shaped hold with a new tool and a spoil heap), drop the new

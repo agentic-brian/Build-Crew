@@ -409,6 +409,16 @@ func _enter_tree() -> void:
 	var d := get_node_or_null("Driveway") as Driveway
 	if d != null:
 		d.crack_base = int(look["crack_base"])
+	# The slab's own rectangle (6.5), stood up BEFORE the Driveway builds itself
+	# in its own `_ready` - the same seam and the same reason as `crack_base`.
+	#
+	# UNCONDITIONAL, on purpose. `Driveway`'s rectangle is static, so it is
+	# process-global: a level that pushed only when its job named a spec would
+	# quietly inherit the shape of whichever level stood here before it - the
+	# title row's backdrop, or the job before a NEXT. A job with no spec pushes
+	# the driveway's defaults, which is the same thing said out loud.
+	var spec: SlabSpec = job.slab_spec() if job != null else SlabSpec.driveway()
+	spec.apply()
 
 
 ## A critic's frame of one field of the look: `--car=Pickup` (and `--paint=K`,

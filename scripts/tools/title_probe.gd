@@ -52,6 +52,8 @@ func _run() -> void:
 	await _the_refusals()
 	await _the_hold()
 	await _the_backdrop()
+	_the_backdrop_left_no_shape_behind()
+	await _a_second_job_keeps_its_save()
 	SaveGame.clear()
 	SaveGame.path_override = ""
 	SaveGame.enabled = true
@@ -456,3 +458,66 @@ func _check(ok: bool, what: String) -> void:
 	if not ok:
 		_failures += 1
 	print("%s %s" % ["  ok " if ok else "FAIL", what])
+
+
+## The title's backdrop is a whole second level, and since 6.5 a level stands its
+## job's rectangle up in `Driveway`'s STATIC fields. So a backdrop that has been
+## and gone must leave the driveway's own numbers behind it, or the next level -
+## the job the child just tapped - is poured into the shape of a picture.
+func _the_backdrop_left_no_shape_behind() -> void:
+	print("-- what the backdrop leaves behind")
+	var job: JobDef = load("res://data/jobs/new_driveway.tres")
+	var spec: SlabSpec = job.slab_spec() if job != null else null
+	_check(spec != null and spec.is_live(),
+		"after a backdrop has stood, the rectangle is still the driveway's (%s)" % str(SlabSpec.live()))
+
+
+## A SECOND job's save must survive a relaunch (6.5).
+##
+## The backdrop loads `new_driveway` unless it is told otherwise, and
+## `SiteMain.resume` refuses a document whose "job" is not the one it loaded. So
+## a child who saved a sidewalk flag came back to a driveway backdrop that said
+## "nothing to resume", `_mode` fell to "fresh", and `TitleMain` cleared the save
+## - their job thrown away with nothing on the screen touched. It is the same
+## shape as the held "new drive" disc that survived a pause (session 8).
+##
+## Nothing can test this without a second job on disk, so one is staged: the
+## driveway's own file under another name, removed again at the end. It is
+## deliberately named `zz_*` so an eye scanning `data/jobs/` sees it is not real.
+func _a_second_job_keeps_its_save() -> void:
+	print("-- a second job's save")
+	const SECOND := "res://data/jobs/zz_probe_job.tres"
+	const SCRATCH := "user://bc_title_second_job.json"
+	var src := FileAccess.get_file_as_string("res://data/jobs/new_driveway.tres")
+	var f := FileAccess.open(SECOND, FileAccess.WRITE)
+	if f == null or src == "":
+		_check(false, "a second job can be staged to test this at all")
+		return
+	f.store_string(src)
+	f.close()
+	await _frames(2)
+	var was_enabled := SaveGame.enabled
+	var was_path := SaveGame.path_override
+	SaveGame.enabled = true
+	SaveGame.path_override = SCRATCH
+	SaveGame.clear()
+	SaveGame.save_data({"job": "zz_probe_job", "rows": 25, "verb": "rebar_lay",
+		"nth": 1, "done": 2, "places": [1, 3], "seed": 2096})
+	var title := (load("res://scenes/main.tscn") as PackedScene).instantiate() as TitleMain
+	add_child(title)
+	await _frames(8)
+	var lot: SiteMain = title.backdrop()
+	var loaded := String(lot.get("_job_file")) if lot != null else ""
+	_check(loaded == "zz_probe_job",
+		"the backdrop stands the job the SAVE is for, not the one it loads by default (%s)" % loaded)
+	_check(SaveGame.exists() and String(title.mode()) == "carry_on",
+		"so a second job's save is carried on, never thrown away on the next launch (%s)" % title.mode())
+	title.queue_free()
+	await _frames(3)
+	SaveGame.clear()
+	SaveGame.path_override = was_path
+	SaveGame.enabled = was_enabled
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SECOND))
+	if FileAccess.file_exists(SECOND + ".import"):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SECOND + ".import"))
+	_check(not FileAccess.file_exists(SECOND), "and the staged job is cleaned up after itself")

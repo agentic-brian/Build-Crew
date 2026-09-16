@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="JobDef" load_steps=28 format=3]
+[gd_resource type="Resource" script_class="JobDef" load_steps=30 format=3]
 
 ; NEW DRIVEWAY - the job the level was built around (DESIGN 2), as data.
 ;
@@ -26,6 +26,7 @@
 
 [ext_resource type="Script" path="res://scripts/job_def.gd" id="1_def"]
 [ext_resource type="Script" path="res://scripts/job_step.gd" id="2_step"]
+[ext_resource type="Script" path="res://scripts/slab_spec.gd" id="3_slab"]
 
 ; 1. BREAK IT UP. Six panels of old concrete, THREE BITES EACH, in three
 ;    different places on the slab - the arrow walks to a different third of the
@@ -370,9 +371,28 @@ count = 3
 sound = "whoosh"
 progress_weight = 1
 
+; THE RECTANGLE this job is poured into (6.5). These are the numbers the
+; driveway has always had, written down where the job can see them instead of
+; being constants in `Driveway`: 3.6 m across, from the garage apron at z -3.4
+; to the kerb at z 5.6, filled on a 6 x 12 grid, with the old slab two panels by
+; two. `SlabSpec` holds no LEVELS - grade, the base and the dig are the same for
+; any slab a child pours - and `SiteMain._enter_tree` stands this up before the
+; Driveway builds itself.
+[sub_resource type="Resource" id="Slab_drive"]
+script = ExtResource("3_slab")
+centre_x = 2.6
+z_apron = -3.4
+z_kerb = 5.6
+width = 3.6
+cells_x = 6
+cells_z = 12
+panels_x = 2
+panels_z = 2
+
 [resource]
 script = ExtResource("1_def")
 name = "New driveway"
+slab = SubResource("Slab_drive")
 arrives_with = "old_drive"
 payoff = "park_on_it"
 steps = Array[ExtResource("2_step")]([SubResource("Step_jack"), SubResource("Step_call_skid"), SubResource("Step_push"), SubResource("Step_skid_off"), SubResource("Step_forms"), SubResource("Step_stakes"), SubResource("Step_call_dump"), SubResource("Step_back_dump"), SubResource("Step_base"), SubResource("Step_dump_off"), SubResource("Step_compact"), SubResource("Step_kerb_form"), SubResource("Step_kerb_stakes"), SubResource("Step_rebar"), SubResource("Step_call_mixer"), SubResource("Step_back_mixer"), SubResource("Step_pour"), SubResource("Step_rake"), SubResource("Step_mixer_off"), SubResource("Step_water"), SubResource("Step_screed"), SubResource("Step_joints"), SubResource("Step_broom"), SubResource("Step_cure"), SubResource("Step_strip")])

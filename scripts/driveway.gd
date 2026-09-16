@@ -34,26 +34,30 @@ signal form_full
 # --- The lot --------------------------------------------------------------------------------
 
 ## The pad: 3.6 m across, 9.0 m from the garage apron down to the kerb.
-const WIDTH := 3.6
-const LENGTH := 9.0
+static var WIDTH := 3.6
+static var LENGTH := 9.0
 ## Where it sits: the middle of the pad in world x, and the z of its two ends.
 ## +Z is toward the street, so `Z_KERB` is the bottom of the drive.
-const CENTRE_X := 2.6
-const Z_APRON := -3.4
-const Z_KERB := 5.6
+static var CENTRE_X := 2.6
+static var Z_APRON := -3.4
+static var Z_KERB := 5.6
 
 ## The old slab: three panels up the drive by two across, each 1.8 x 3.0.
 ## Two by two, not two by three (the user, 2026-09-14: "this takes too long
 ## being 6 sections.. just make it 4 large sections"): twelve bites, not
 ## eighteen.
-const PANELS_X := 2
-const PANELS_Z := 2
+static var PANELS_X := 2
+static var PANELS_Z := 2
 const SLAB_T := 0.12
 ## How wide the saw-cut gap between two old panels reads, metres. Real joints,
 ## so the old drive is SLABS and not one painted rectangle.
 const PANEL_GAP := 0.04
 
-## The hole, the base and the new slab.
+## The hole, the base and the new slab. These three are LEVELS, not the slab's
+## rectangle, and they stay `const` on purpose: grade is 0.0 by definition, and
+## a sidewalk flag is the same 100 mm slab on the same 100 mm base as a
+## driveway. 183 of the references to this block are these three; none of them
+## is a thing a job can differ in.
 const DIG := 0.20
 const BASE_TOP := -0.10
 const GRADE := 0.0
@@ -61,8 +65,8 @@ const GRADE := 0.0
 ## The new slab's fill grid. Six cells across by twelve up the drive: fine
 ## enough that a swept chute lays a band rather than filling a quarter of the
 ## drive at once, coarse enough that 72 boxes is nothing to draw.
-const CELLS_X := 6
-const CELLS_Z := 12
+static var CELLS_X := 6
+static var CELLS_Z := 12
 
 ## How many loose stones are scattered over the finished base.
 ## 420 small ones rather than 300 big ones: at 0.23 m across and tilted 16 degrees
