@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/site_main.gd" id="1_main"]
 [ext_resource type="Resource" path="res://data/site_config.tres" id="2_cfg"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/site_hud.gd" id="6_hud"]
 [ext_resource type="Script" path="res://scripts/site_verbs.gd" id="7_verbs"]
 [ext_resource type="Script" path="res://scripts/job_runner.gd" id="8_runner"]
+[ext_resource type="Script" path="res://scripts/settings_menu.gd" id="9_settings"]
 
 [node name="SiteLevel" type="Node3D"]
 script = ExtResource("1_main")
@@ -32,3 +33,6 @@ script = ExtResource("8_runner")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6_hud")
+
+[node name="Settings" type="CanvasLayer" parent="."]
+script = ExtResource("9_settings")

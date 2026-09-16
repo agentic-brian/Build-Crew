@@ -352,6 +352,26 @@ extends Resource
 ## one flick struck nine metres in a third of a second (the plan's 2.5). The
 ## grab is taken ONCE at the press and kept until the finger lifts.
 @export_range(0.3, 5.0, 0.1) var screed_drag_speed: float = 1.2
+## THE PLATE COMPACTOR (the plan's 5.1). A finger ON the plate walks it over
+## the base no faster than `plate_speed` - a person walking one - and every
+## base cell whose middle is within `plate_radius` packs at `pack_rate` a
+## second (tailing off to the edge). The radius is between a cell's neighbour
+## along the drive (0.75 m) and its diagonal (0.96 m), so a plate held still
+## packs its own cell and the four beside it - a plus sign - and nothing more.
+@export_range(0.3, 3.0, 0.1) var plate_speed: float = 1.2
+@export_range(0.5, 1.2, 0.01) var plate_radius: float = 0.78
+@export_range(0.2, 5.0, 0.1) var pack_rate: float = 1.4
+## The picture RATTLES while the plate works: a trauma floor, lighter than the
+## breaker's, only while it is really packing. (The plan's "0.012 every held
+## frame" through `shake` never climbs above the decay - the 1.4 lesson.)
+@export_range(0.0, 0.6, 0.01) var shake_plate_floor: float = 0.18
+## The plate's head buzzes on its mounts under the still handle.
+@export_range(1.0, 30.0, 0.5) var plate_hz: float = 11.0
+@export_range(0.0, 0.02, 0.001) var plate_stroke: float = 0.006
+## Seconds a bay's last patches take to go down on their own as the plate
+## leaves it (1.6), and where the child's hands are in the PLATE picture.
+@export_range(0.1, 2.0, 0.05) var pack_finish_time: float = 0.5
+@export var plate_hold: Vector3 = Vector3(0.0, -0.85, 0.50)
 @export_range(0.3, 5.0, 0.1) var joint_drag_speed: float = 1.5
 @export_range(0.5, 6.0, 0.1) var screed_saw_hz: float = 1.8
 ## How wet the slab looks when it is poured, and after the water (0 dry, 1
@@ -398,8 +418,18 @@ extends Resource
 @export_range(1, 4) var horn_toots: int = 2
 @export_range(0.0, 2.0, 0.05) var horn_delay: float = 0.30
 @export_range(0.1, 2.0, 0.05) var horn_gap: float = 0.45
-## Seconds the forms take to lift away when the slab is finished.
-@export_range(0.2, 3.0, 0.05) var strip_time: float = 1.0
+## STRIPPING THE FORMS is the child's now (the improvement plan's 5.3): one
+## tap a board, and that board's beat lasts this long - its pegs drawn, the
+## board prised `strip_pry_deg` off the slab's edge (half that for the kerb
+## board, which has the crossing behind it), lifted `strip_lift` clear and
+## carried to the crew's pile on the right lawn (`Driveway.STRIP_PILE_X`).
+## (`strip_time` is gone: the boards no longer come off by themselves.)
+@export_range(0.5, 4.0, 0.05) var strip_board_time: float = 1.8
+@export_range(0.0, 20.0, 0.5) var strip_pry_deg: float = 6.0
+@export_range(0.05, 0.8, 0.01) var strip_lift: float = 0.30
+## After the last board, the tada's look back at the finished drive on the
+## wide before the cut to the street and the car.
+@export_range(0.0, 5.0, 0.1) var payoff_look: float = 1.6
 ## The cure: seconds the light takes to sweep from afternoon to evening. You
 ## do not drive on green concrete, and a child should not be taught that you
 ## do, so the car only arrives after this.
@@ -423,6 +453,15 @@ extends Resource
 ## moving large trucks in a residential area").
 @export_range(1.0, 12.0, 0.1) var arrive_time: float = 7.0
 @export_range(4.0, 30.0, 0.5) var arrive_distance: float = 14.0
+## A truck's arrival is TWO legs since the plan's fifth session (decision 4):
+## down the street on its own, over `street_time`, to stop tail to the drive -
+## and then BACK IN, only while the child's finger holds it, over `back_time`
+## seconds of holding. It gathers speed and comes to rest over `back_ramp`
+## seconds instead of lurching when the finger lands and lifts; 4.5 s, not the
+## 3.85 the leg took on its own, because "they are slow moving large trucks".
+@export_range(1.0, 12.0, 0.1) var street_time: float = 3.15
+@export_range(1.0, 12.0, 0.1) var back_time: float = 4.5
+@export_range(0.0, 1.5, 0.05) var back_ramp: float = 0.25
 ## Seconds it takes to leave again.
 @export_range(1.0, 12.0, 0.1) var leave_time: float = 6.0
 ## Seconds the exit is WATCHED before the job moves on: the pad cleared, the

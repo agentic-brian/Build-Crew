@@ -106,6 +106,14 @@ to where the truck is biggest.
   press-and-HOLD of 0.9 s with a ring filling round it, and it goes to the
   title with the job saved. Family rule: any control that throws work away is
   a hold, never a tap.
+- **Half done 2026-09-15 (session 7).** The house's DESTINATION now exists (it
+  reaches the title row through `_on_next`), the job it leaves is saved (6.2),
+  and the 0.9 s hold-with-a-ring is built and tested - it is the title's own
+  "new drive" disc (`StartMenu`'s `HOLD_TIME` and `HoldRing`). What is left of
+  0.1 is the button itself: `SiteHud.show_home` still has no caller, so the
+  house is off the screen in play, and putting it back means moving that hold
+  onto `ToyHud`'s home button (a plain release edge today) and inverting the
+  three smoke checks that hold it off the screen.
 - **Files:** `scripts/site_hud.gd`, `scripts/toy_hud.gd`, `scripts/site_main.gd`.
 - **Check:** smoke at step 5 calls `hud.simulate_home()` and asserts the
   runner's index and `drive.forms_in()` are unchanged.
@@ -190,7 +198,7 @@ is `shake_stake`); the pour's white mime waits `hint_delay` like every beat,
 with the gold arrow at `chute_hint_delay` (2.1); and the mixer now parks in
 the MIDDLE of its creep range, because with UP meaning up a truck parked at
 the kerb end had nowhere to go (2.1). 1.8's optional hold on the arrival's
-last leg is not built - it is decision 4.
+last leg was decision 4, and was built in session 5.
 
 The rule under all of these: **the first 100 ms after a tap is where a small
 child decides whether the toy heard them; the last second of a phase is where
@@ -309,6 +317,14 @@ they decide whether they did it.**
   `hold_burst` plus 0.25 s.
 
 ### 1.8 A tap on a machine honks it (S), and the arrival's last leg is a hold (M)
+
+**DONE 2026-09-15: the S half in session 2, the M half in session 5** (the
+user's decision 4). Built as two rows per truck - the street leg a BUTTON, the
+reverse a weight-0 HOLD (`back_dump`, `back_mixer`, target `Back:` so a finger
+still down at the stop does not start the tip or the pour) - walked by
+`Machine.set_path`/`place_on_path` over `back_time` 4.5 s of holding with a
+`back_ramp`; a finger pressed on the truck as it comes down the street and kept
+down backs it in when it stops. The skid steer still drives itself.
 - **Today:** while a machine arrives or leaves, `_press` either kicks GO
   (BUTTON step) or falls to `runner.tap()` which returns false (AUTO step).
   `horn_1/2.mp3` and `voice_hatchback_1/2.mp3` sit imported and unused.
@@ -663,6 +679,27 @@ touched. Not before the tiers above.
 
 ## 7. Tier 5 - learning beats worth adding (each is a PLACE the child works)
 
+**DONE 2026-09-15 (session 5): 5.1, 5.2 and 5.3, with 1.8's hold** - the user
+chose 5.1 and 5.2 (decisions 6 and 5); 5.3 needed no decision. Green:
+`SITE_SMOKE PASS 446/446` (was 332) and `MACHINE_PROBE PASS 20/20` (was 16); logged as
+the last section of `docs/critic_log.md`, contract in `docs/DESIGN.md` 7d, frames
+in `renders/critic/session5/`. Where the build departs from the text below:
+5.1's plate is a DRAG through `_scrub`, not `_hold` (a still finger must pack
+only a plus sign), one beat per bay (count 3, 6 stops), the plate moved only by
+a finger ON it; its eye is a new `PLATE` shot from the bay's kerb side, and the
+rattle is a shake FLOOR (`shake_plate_floor`), because "0.012 every held frame"
+never beats the decay; the packed colour is a luma step baked into the base at
+the end. 5.2's groups were cut by INDEX, not position: which boards are live is
+now state (`Driveway.form_live`/`stake_live`), and the old first `form_set` beat
+that re-hung every board would have lifted the three in; the crossing now starts
+behind the kerb trench, so the cones moved out to `CONE_MOUTH_OUT` 0.40. 5.3 has
+a cure ROW before it (`slab_cure`, weight 0) so the boards come off a cured slab,
+a new `STRIP` shot holding all three, a tap anywhere on a board counting, the
+boards carried to a pile on the right lawn (never faded; a 9 m board has no room
+beside its own edge on this lot) and carried off at the cut, and the tada moved
+to the last board. The plate's eye walks after it between strokes (`PlateView`). The job is 25 rows and 83 stops; stages and `--step`
+name verbs now.
+
 Judged by three tests: is it honest, is it a place the finger covers, would a
 four-year-old find it fun. Three pass; three were considered and rejected.
 
@@ -729,6 +766,17 @@ a chore - hold it for a shorter second job where there is room).
 ## 8. Tier 6 - replay, shell, product
 
 ### 6.1 The second driveway is a different driveway (S to M)
+**DONE 2026-09-15 (session 6), with 6.2.** `SiteLook` draws the car (six
+homeowners', in Car Garage's paints and their own voices), the house and garage
+swatch and a vetted crack base from one seed per visit; seed 0 is the legacy lot
+and every harness with no seed plays it (the pre-change frames re-taken differ
+only by their own wall-clock ring pulse, a mean of 0.03 of 255 at most); NEXT
+draws a visit that differs in car, house and cracks. Two
+corrections to the item below: the vehicles are NOT Synty - they are Car
+Garage's own `tools/make_vehicles.py` builds, loaded by `Machine`, which is what
+lets them sit in this PUBLIC repo - and only three of the six have a paint
+surface (the police car, taxi and ice-cream van are liveries). A car now parks
+by its nose (the pickup went through the shut garage door at the old spot).
 - **Today:** NEXT reloads the identical scene: the same cracks (seeded off
   the panel number), the same cream house, the same red hatchback. Nothing
   about the second play is the child's to discover.
@@ -747,6 +795,16 @@ a chore - hold it for a shorter second job where there is room).
   `assets/models/vehicles/`.
 
 ### 6.2 The job survives the house and the tablet being taken away (M)
+**DONE 2026-09-15 (session 6).** Built differently from the item below where the
+item was wrong: the save is written on `JobRunner.place_changed` (a step
+entered, a beat landed), not `beat_done`, which fires mid-hold and never for the
+calls, back-ins and leaves; it names the row by verb and nth with the job's row
+count and WHICH places are done (`places`), because a count cannot say the child
+laid bars 3 and 1 - the item's own check would have passed on bars 1 and 2; and a
+resume poses the world as play leaves the row (`pose(..., play = true)`), not
+the screenshot pose, whose tricks hide the held tools and the pour's truck.
+`RESUME_PROBE` resumes every row the child works at its start and one place
+before its end.
 - **Today:** `save_game.gd` is here and "NOTHING WRITES IT". Closing the app
   mid-job loses every stake, bar and the pour.
 - **Change:** on `beat_done` write `{version, job, step, done}` (no
@@ -757,10 +815,23 @@ a chore - hold it for a shorter second job where there is room).
   the runner run. A HOLD or SCRUB resumes at its own start.
 - **Files:** `scripts/site_main.gd`, `scripts/save_game.gd`,
   `scripts/job_runner.gd`, `scripts/tools/site_smoke.gd`.
-- **Check:** play to step 9 done 2, save, reload, assert the world equals
-  `pose('based', 9, 2)` and the bar reads the same stop.
+- **Check:** play to the rebar beat with 2 bars down, save, reload, assert the
+  world equals `pose('based', job.index_of('rebar_lay'), 2)` and the bar reads the
+  same stop. (Steps are looked up by verb since session 5.)
 
 ### 6.3 A title row that is the job picker (M, the deferred port)
+**DONE 2026-09-15 (session 7).** Built as the item says, with three things it
+did not foresee. The BACKDROP is `scenes/site.tscn` itself, instanced with a new
+`SiteMain.dress_only` and posed - not a dressing scene, which would have split
+the posed states across two files - so the row stands on a fresh cracked drive,
+on the drive the child left (posed from the save, `dress_from_save`), or on the
+one they have just finished with the car on it. There is no second word-card
+page and no word anywhere on the screen, so the name (decision 7) is off this
+item's critical path entirely. And "carry on / new drive" is TWO controls, not
+one: a tap on the job's disc is always the safe thing (start it, or carry on),
+while throwing a half-built drive away is a smaller disc in the other corner,
+held 0.9 s with a ring filling round it - 0.1's own number, and the widget 0.1
+will hang on the house.
 - **Today:** the app boots straight onto the cracked drive; NEXT hard-cuts
   from the evening reward back to daylight.
 - **Change:** port `title_main.gd` + `start_menu.gd` from car-fixer (PropIcon,
@@ -778,6 +849,23 @@ a chore - hold it for a shorter second job where there is room).
   somewhere to stand.
 
 ### 6.4 The Kids-category chrome, in this order (L, the checklist)
+**Parts 1, 2, 3, 5 and 7 DONE 2026-09-16 (session 8); 4 and 6 are what is
+left.** The settings cog is on BOTH screens (a four-year-old learns one place
+once, and "reachable from inside the app" cannot mean "from the one screen the
+reviewer opened"); it pauses the job under it and lets go of every finger that
+was down, including the title's held "new drive" disc, which would otherwise
+have thrown a saved job away when the panel closed. The privacy link sits behind
+the arithmetic gate. Every corner control now walks in off the hardware's own
+insets - including the four steering pads and GO's halo, neither of which the
+sibling's version covers - and `safe_area_probe` measures both screens at
+1565x720 and 1280x960. Reduce-motion stops the CAMERA only: `Settings.motion_reduced()`
+guards `shake()`, `hold_floor()` and the shake's own `_process`, while the
+slab's kick, the bit's stroke, the rings and every answer to a finger keep
+moving. The notices file, the two generated Godot licence texts and a
+`.gdignore` on `renders/` are in. **Part 6, the name, is answered: Build Crew.**
+Part 4 (export presets, the fifteen icons, the splash, the bundle id) is the
+only piece left, and every place the name has to go is listed in the session-8
+log.
 1. The settings cog, the eleven-step slider and the music toggle
    (`settings_menu.gd`; `Settings` is already here, so this is UI only). It
    is the one thing a parent reaches for in the first two minutes, and the
@@ -888,6 +976,14 @@ The smoke is green at 221 checks and does not hear, touch or replay:
 Each of these pushes on `docs/CRITIC.md`'s decided list or on a family
 convention. The plan is written so everything else can be built without them.
 
+**Answered 2026-09-15 (before session 5):** 1 no steering (closed before
+session 3); 2 KEEP the word "YAY!"; 3 background leaves (built to the default
+in session 3); 4 YES, the arrival's reverse leg is a hold; 5 YES, the kerb
+board goes in after the base; 6 YES, the plate compactor. **7 answered
+2026-09-16: the name is BUILD CREW** - what every doc, the repo and
+`project.godot` already said, and the family's own pattern (Tree Crew, Car
+Garage): the CREW is the child. Nothing is left open.
+
 1. **The pour's control:** flip the pads and mime them (2.1, inside the
    contract) - and then go on to steer with a finger on the form (2.2)?
 2. **The "YAY!" banner:** keep the family's word, or make it a picture (3.3)?
@@ -920,11 +1016,13 @@ convention. The plan is written so everything else can be built without them.
    that just came off it.
 4. **Tier 4 visuals** in whatever order the frames bother you; 4.2, 4.3 and
    4.4 are an hour together. **DONE 2026-09-15.**
-5. **Your decisions from section 11**, then tier 5 as chosen.
+5. **Your decisions from section 11**, then tier 5 as chosen. **DONE
+   2026-09-15** (decisions 2 and 4-6 answered; 1.8's hold, 5.1, 5.2, 5.3).
 6. **Tier 6:** seed (6.1) first because it is cheap and it is the replay
    hook; then save (6.2), title (6.3), chrome (6.4), and the sidewalk flag
    (6.5) as the second job because it forces the Slab-spec refactor every
-   later job needs.
+   later job needs. **6.1 and 6.2 DONE 2026-09-15 (session 6); 6.3 DONE
+   2026-09-15 (session 7).**
 
 Every session ends with `site_smoke` and `machine_probe` green and the
 frames re-taken into a dated `renders/critic/` folder, as the brief already

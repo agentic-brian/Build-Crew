@@ -1,24 +1,28 @@
-[gd_resource type="Resource" script_class="JobDef" load_steps=22 format=3]
+[gd_resource type="Resource" script_class="JobDef" load_steps=28 format=3]
 
 ; NEW DRIVEWAY - the job the level was built around (DESIGN 2), as data.
 ;
-; The nine phases the user asked for, in their order, plus the four beats that
-; fetch and send away the machines. Seventy-four progress stops, weighted by
-; the child's MINUTES rather than their taps (the improvement plan's 3.6): the
-; jackhammer's twelve bites, two pushes (4), four boards, ten stakes, the base
-; (2), twelve bars, the POUR (6) and the come-along (8), the water (4), the
-; screed (4), two joints and three bays of broom (6). The bar used to be
-; three-quarters full at the mixer and then barely moved through the longest,
-; most hands-on ninety seconds of the job. Calling a machine on is worth 0 -
-; pressing a button is not a child's WORK - so the bar's last stop is the
-; broom, which is the last thing done to the slab.
+; The nine phases the user asked for, in their order, plus the beats that fetch
+; and send away the machines, and since the plan's fifth session (2026-09-15)
+; the four the user chose to add: each truck's reverse leg is the child's hold,
+; the base is packed with a plate compactor, the kerb board and its two pegs go
+; in AFTER the base (the trucks back through that end), and the child strips
+; their own forms after the cure. Twenty-five rows.
+;
+; Eighty-three progress stops, weighted by the child's MINUTES rather than their
+; taps (the improvement plan's 3.6): the jackhammer's twelve bites, two pushes
+; (4), four boards, ten stakes, the base (2), three bays of the plate (6), twelve
+; bars, the POUR (6) and the come-along (8), the water (4), the screed (4), two
+; joints, three bays of broom (6) and three boards stripped. Calling a machine on
+; is worth 0 - pressing a button is not a child's WORK - and so is waving a truck
+; back in and waiting for the cure, so the bar's last stop is the last board off.
 ;
 ; kind: 0 TAP, 1 BUTTON, 2 AUTO, 3 HOLD.
 ;
 ; Every HOLD runs only while the finger is down and pauses where it is when it
 ; lifts. The pour is the one beat steered with the four PADS (SiteMain._process);
-; the water and the broom are the two worked by DRAGGING the finger over the slab,
-; and they only happen where the finger is.
+; the water, the plate and the broom are worked by DRAGGING the finger over the
+; slab, and they only happen where the finger (or the tool it holds) is.
 
 [ext_resource type="Script" path="res://scripts/job_def.gd" id="1_def"]
 [ext_resource type="Script" path="res://scripts/job_step.gd" id="2_step"]
@@ -76,8 +80,10 @@ count = 1
 sound = ""
 progress_weight = 0
 
-; 5. THE FORMS. Four boards, one tap each - setting a board is one decisive
-;    move, not a hold - seen low along the edge of the hole the board goes on.
+; 5. THE FORMS. The two long boards and the expansion strip, one tap each -
+;    setting a board is one decisive move, not a hold - seen low along the edge
+;    of the hole the board goes on. The KERB board is not in this row: the
+;    trucks back through that end, so it goes in after the base (5b).
 [sub_resource type="Resource" id="Step_forms"]
 script = ExtResource("2_step")
 kind = 0
@@ -85,12 +91,12 @@ target = "Form_*"
 verb = "form_set"
 tool = "none"
 shot = "FORM"
-count = 4
+count = 3
 sound = ""
 progress_weight = 1
 
-; 6. THE STAKES. Ten of them, ONE BLOW OF THE SLEDGE EACH, right down on the peg
-;    being hit.
+; 6. THE STAKES. Eight of them - the long boards' - ONE BLOW OF THE SLEDGE
+;    EACH, right down on the peg being hit.
 [sub_resource type="Resource" id="Step_stakes"]
 script = ExtResource("2_step")
 kind = 0
@@ -98,11 +104,12 @@ target = "Stake_*"
 verb = "stake_drive"
 tool = "sledge"
 shot = "STAKE"
-count = 10
+count = 8
 sound = "whoosh"
 progress_weight = 1
 
-; 7. The button again: the dump truck reverses up the drive.
+; 7. The button again: the dump truck comes down the street and stops, tail to
+;    the drive, waiting.
 [sub_resource type="Resource" id="Step_call_dump"]
 script = ExtResource("2_step")
 kind = 1
@@ -110,6 +117,22 @@ target = ""
 verb = "call_dump"
 tool = "none"
 shot = "WIDE"
+count = 1
+sound = ""
+progress_weight = 0
+
+; 7b. BACK IT IN. The child is the banksman: a finger on the truck and it backs
+;     up the drive, beeping, only while the finger is down (decision 4). Worth
+;     nothing on the bar - guiding a truck is not the job's work - and its
+;     target is `Back:`, not `Machine:`, so a finger still down when it stops
+;     does not start the tip under a camera that is still moving.
+[sub_resource type="Resource" id="Step_back_dump"]
+script = ExtResource("2_step")
+kind = 3
+target = "Back:DumpTruck"
+verb = "back_dump"
+tool = "none"
+shot = "STREET"
 count = 1
 sound = ""
 progress_weight = 0
@@ -138,6 +161,47 @@ count = 1
 sound = ""
 progress_weight = 0
 
+; 8b. PACK IT DOWN (decision 6). The plate compactor, one bay of the base per
+;     beat, DRAGGED: a finger on the plate walks it over the stone, the stones
+;     go flat and the gravel a step paler wherever it has been, and the picture
+;     rattles while it works. A finger held still packs only the plate's own
+;     patch.
+[sub_resource type="Resource" id="Step_compact"]
+script = ExtResource("2_step")
+kind = 3
+target = "Slab"
+verb = "compact_base"
+tool = "plate"
+shot = "PLATE"
+count = 3
+sound = ""
+progress_weight = 2
+
+; 8c. CLOSE THE FORM (decision 5). The kerb board, from the road, now the
+;     trucks that backed through that end have gone...
+[sub_resource type="Resource" id="Step_kerb_form"]
+script = ExtResource("2_step")
+kind = 0
+target = "Form_3"
+verb = "form_set"
+tool = "none"
+shot = "FORM"
+count = 1
+sound = ""
+progress_weight = 1
+
+; 8d. ...and its two pegs, from the road's edge.
+[sub_resource type="Resource" id="Step_kerb_stakes"]
+script = ExtResource("2_step")
+kind = 0
+target = "Stake_9"
+verb = "stake_drive"
+tool = "sledge"
+shot = "STAKE"
+count = 2
+sound = "whoosh"
+progress_weight = 1
+
 ; 9b. THE STEEL (DESIGN 2d). Twelve bars, one tap each: the four long ones onto
 ;     their chairs first, then the cross bars in pairs down the drive, tied where
 ;     they cross. The bars sit UP off the base so they end in the middle of the
@@ -154,8 +218,8 @@ count = 12
 sound = ""
 progress_weight = 1
 
-; 10. The button once more: the mixer pulls up in the road and backs its tail to
-;     the kerb - and no further, because the steel is down.
+; 10. The button once more: the mixer comes down the street and stops, waiting
+;     to be backed to the kerb.
 [sub_resource type="Resource" id="Step_call_mixer"]
 script = ExtResource("2_step")
 kind = 1
@@ -163,6 +227,19 @@ target = ""
 verb = "call_mixer"
 tool = "none"
 shot = "WIDE"
+count = 1
+sound = ""
+progress_weight = 0
+
+; 10b. BACK IT TO THE KERB - and no further, because the steel is down. The
+;      child's hold again; then the chute comes out.
+[sub_resource type="Resource" id="Step_back_mixer"]
+script = ExtResource("2_step")
+kind = 3
+target = "Back:ConcreteTruck"
+verb = "back_mixer"
+tool = "none"
+shot = "STREET"
 count = 1
 sound = ""
 progress_weight = 0
@@ -264,9 +341,38 @@ count = 3
 sound = ""
 progress_weight = 2
 
+; 17. LATER THAT DAY. The cones go across the mouth of the drive and the light
+;     goes to evening while the slab goes off: boards do not come off concrete
+;     that was broomed a second ago. Nothing to do, so worth nothing.
+[sub_resource type="Resource" id="Step_cure"]
+script = ExtResource("2_step")
+kind = 2
+target = ""
+verb = "slab_cure"
+tool = "none"
+shot = "WIDE"
+count = 1
+sound = ""
+progress_weight = 0
+
+; 18. STRIP THE FORMS (the plan's 5.3). What the child put in, the child takes
+;     out: three boards, one tap each, in any order - the pegs are drawn, the
+;     board is prised off the clean edge of the new slab and laid on the grass,
+;     and the earth goes back against the concrete. The last board is the tada.
+[sub_resource type="Resource" id="Step_strip"]
+script = ExtResource("2_step")
+kind = 0
+target = "Form_*"
+verb = "form_strip"
+tool = "none"
+shot = "STRIP"
+count = 3
+sound = "whoosh"
+progress_weight = 1
+
 [resource]
 script = ExtResource("1_def")
 name = "New driveway"
 arrives_with = "old_drive"
 payoff = "park_on_it"
-steps = Array[ExtResource("2_step")]([SubResource("Step_jack"), SubResource("Step_call_skid"), SubResource("Step_push"), SubResource("Step_skid_off"), SubResource("Step_forms"), SubResource("Step_stakes"), SubResource("Step_call_dump"), SubResource("Step_base"), SubResource("Step_dump_off"), SubResource("Step_rebar"), SubResource("Step_call_mixer"), SubResource("Step_pour"), SubResource("Step_rake"), SubResource("Step_mixer_off"), SubResource("Step_water"), SubResource("Step_screed"), SubResource("Step_joints"), SubResource("Step_broom")])
+steps = Array[ExtResource("2_step")]([SubResource("Step_jack"), SubResource("Step_call_skid"), SubResource("Step_push"), SubResource("Step_skid_off"), SubResource("Step_forms"), SubResource("Step_stakes"), SubResource("Step_call_dump"), SubResource("Step_back_dump"), SubResource("Step_base"), SubResource("Step_dump_off"), SubResource("Step_compact"), SubResource("Step_kerb_form"), SubResource("Step_kerb_stakes"), SubResource("Step_rebar"), SubResource("Step_call_mixer"), SubResource("Step_back_mixer"), SubResource("Step_pour"), SubResource("Step_rake"), SubResource("Step_mixer_off"), SubResource("Step_water"), SubResource("Step_screed"), SubResource("Step_joints"), SubResource("Step_broom"), SubResource("Step_cure"), SubResource("Step_strip")])

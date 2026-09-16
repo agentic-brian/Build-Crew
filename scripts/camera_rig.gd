@@ -67,8 +67,15 @@ const SURFACE := "SURFACE"
 ## hose and the broom - are played from here, with the tool in the near corner
 ## of the picture instead of six metres away and 30 px across.
 const HAND := "HAND"
-## A vehicle arriving or leaving, from up the street.
+## A vehicle arriving or leaving, from up the street - and the child waving a
+## truck back into the drive (the plan's 1.8, its reverse leg held).
 const STREET := "STREET"
+## Low behind the plate compactor, on the bay of base being packed, looking up
+## the drive at the bays already done: still while the finger works (5.1).
+const PLATE := "PLATE"
+## All three form boards and the kerb at once, for the child stripping them
+## after the cure (5.3).
+const STRIP := "STRIP"
 ## The reward: down at a child's height on the car standing on the new slab.
 const PAYOFF := "PAYOFF"
 

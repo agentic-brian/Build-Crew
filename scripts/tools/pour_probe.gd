@@ -15,8 +15,14 @@ func _ready() -> void:
 
 func _run() -> void:
 	get_window().size = Vector2i(1280, 720)
+	# A probe decides the OS's reduce-motion for itself, or the picture it
+	# measures is decided by the machine it runs on (6.4).
+	Settings.motion_override = -1
 	await get_tree().process_frame
-	Engine.set_meta("shot_args", {"stage": "rebar", "step": 10})
+	# The stage names the mixer's call by its verb (the fifth session renumbered
+	# every step).
+	Engine.set_meta("shot_args", {"stage": "rebar"})
+	SaveGame.enabled = false
 	var packed: PackedScene = load("res://scenes/site.tscn")
 	main = packed.instantiate() as SiteMain
 	add_child(main)
@@ -28,8 +34,12 @@ func _run() -> void:
 	hud.simulate_button("call")
 	var frames := 0
 	while frames < 9000 and not (runner.current_step() != null and runner.current_step().verb == "pour_chute"):
+		# The mixer stops in the road and waits to be backed in (1.8): hold it.
+		if runner.current_step() != null and runner.current_step().verb == "back_mixer" and not runner.held:
+			runner.hold(true)
 		frames += 1
 		await get_tree().process_frame
+	runner.hold(false)
 	print("POUR_PROBE on the pour after %d frames; rig moving %s" % [frames, str(main.rig.is_moving())])
 	var pointer := main.get_node_or_null("Pointer") as SpotRings
 	for i in range(10):

@@ -27,6 +27,9 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	# A probe decides the OS's reduce-motion for itself, or the picture it
+	# measures is decided by the machine it runs on (6.4).
+	Settings.motion_override = -1
 	var cfg := load("res://data/site_config.tres") as SiteConfig
 	if cfg == null:
 		cfg = SiteConfig.new()
@@ -52,10 +55,12 @@ func _run() -> void:
 				_sweep_skid(m)
 			"DumpTruck":
 				_sweep_dump(m)
+				_held_path(m)
 			"ConcreteTruck":
 				_sweep_chute(m)
 		m.queue_free()
 		await get_tree().process_frame
+	await _plate_prop(cfg)
 	print("MACHINE_PROBE %s %d/%d" % ["PASS" if _failures == 0 else "FAIL", _checks - _failures, _checks])
 	get_tree().quit(0 if _failures == 0 else 1)
 
@@ -126,6 +131,49 @@ func _sweep_dump(m: Machine) -> void:
 		"DumpTruck: the load leaves from a lip that stays STILL as the bed rises (%.3f moved)"
 			% lip_up.distance_to(lip_down))
 	m.set_bed(0.0)
+
+
+## A truck walked along a path by a FINGER, not a clock (the improvement plan's
+## 1.8): standing it at the same place twice moves nothing and turns no wheel,
+## and the end of the path is where it stops, facing away from the way it came.
+func _held_path(m: Machine) -> void:
+	m.place(Vector3(-7.0, 0.0, 8.6), -90.0)
+	var pts: Array[Vector3] = [Vector3(-7.0, 0.0, 8.6), Vector3(-2.0, 0.0, 8.0), Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, 0.5)]
+	m.set_path(pts, true)
+	m.place_on_path(0.5)
+	var at := m.global_position
+	var rolled := m.rolled_m()
+	m.place_on_path(0.5)
+	_check(m.global_position.distance_to(at) < 0.0001 and absf(m.rolled_m() - rolled) < 0.0001 and not m.is_driving(),
+		"DumpTruck: a held path stands still between presses (moved %.4f, rolled %.4f)"
+			% [m.global_position.distance_to(at), m.rolled_m() - rolled])
+	m.place_on_path(1.0)
+	_check(Vector2(m.global_position.x, m.global_position.z).distance_to(Vector2(0.0, 0.5)) < 0.01 \
+		and absf(wrapf(rad_to_deg(m.rotation.y) - m.path_facing_deg(1.0), -180.0, 180.0)) < 1.0 \
+		and m.rolled_m() < rolled,
+		"DumpTruck: at the end of it, backed in tail first, wheels turned backwards (%s, %.1f deg)"
+			% [_v(m.global_position), rad_to_deg(m.rotation.y)])
+
+
+## The plate compactor's GLB (5.1): the four nodes its tool contract names, the
+## origin on the sole, and a handle rooted near that origin so stretching it to
+## the hands does not pull it off the engine.
+func _plate_prop(cfg: SiteConfig) -> void:
+	print("--- PlateCompactor ---")
+	var t := HandTool.new()
+	t.kind = "plate"
+	add_child(t)
+	t.setup(cfg)
+	await get_tree().process_frame
+	var body := t.find_child("Body", true, false) as MeshInstance3D
+	var box := body.get_aabb() if body != null else AABB()
+	var grip := t.find_child("Grip", true, false) as Node3D
+	_check(t.model_loaded and t.missing_nodes.is_empty() and body != null and grip != null,
+		"PlateCompactor: the GLB has Body, Head, Grip and Tip (missing: %s)" % _list(t.missing_nodes))
+	_check(box.position.y < 0.05 and box.end.z > -0.15 and box.end.y > 0.8,
+		"PlateCompactor: its handle is rooted at the frame and reaches back to the hands (%s)" % str(box))
+	t.queue_free()
+	await get_tree().process_frame
 
 
 ## The chute swung either way, deployed. The SWING is the aim, so it has to reach

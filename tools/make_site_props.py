@@ -33,6 +33,11 @@ assert that is really where it is.
                pulls wet concrete with), marker Tip at the middle of the
                blade's bottom edge. Phase 6b: the concrete is PULLED up the
                form from where the chute lands it (DESIGN 2a).
+  PlateCompactor  Head (everything that vibrates: the steel sole with curled
+               ends, exciter, frame, engine, tool-orange cowl and belt guard),
+               Body (the rubber mounts and the two-tube handle, rooted near the
+               origin so a stretch keeps it on the engine), Grip (the bar across
+               the handle ends, its own node), marker Tip at the middle of the sole
 """
 import math
 import os
@@ -82,6 +87,7 @@ CONTRACT = {
     "Jointer": ["Body", "Blade", "Grip", "Tip"],
     "Broom": ["Body", "Head", "Tip"],
     "ComeAlong": ["Body", "Head", "Tip"],
+    "PlateCompactor": ["Body", "Head", "Grip", "Tip"],
 }
 # A three-quarter view for the previews, plus one straight down the working axis.
 VIEWS = {"hero": (1.05, 0.52, 1.25), "work": (-0.9, 0.45, 0.85)}
@@ -330,6 +336,86 @@ def build_come_along():
     return m
 
 
+# ==========================================================================
+#  7. PLATE COMPACTOR - a walk-behind plate. Same frame again: origin at the
+#     middle of the sole, +Z down into the ground, +Y toward the hands.
+# ==========================================================================
+def build_plate_compactor():
+    """A walk-behind plate compactor: a flat steel sole with its ends curled
+    up, the exciter on it, a frame and deck, a small petrol engine under a
+    tool-orange tank and belt guard, and a two-tube handle back to a bar.
+    `Head` is everything that vibrates; `Body` is only the handle, rooted near
+    the origin because `HandTool.aim_handle_at` stretches it about the origin
+    along Y and Z (up to 3.2x) and a root out on the frame would drift off the
+    engine; `Grip` is its own node so it rides to the stretched end."""
+    m = Machine("PlateCompactor")
+    H = "Head"
+    # The sole: the working face, 0.50 x 0.56, and both ends curled up like a
+    # sled's so it reads as a PLATE from a low camera and not a slab of steel.
+    bm, fin = m.part(H, "Sole", "Disc", bevel=0.004)
+    add_box(bm, V(0.0, 0.0, -0.012), (0.500, 0.560, 0.024))
+    fin()
+    bm, fin = m.part(H, "Curls", "Disc", bevel=0.003)
+    for sy in (-1.0, 1.0):
+        # 8 mm narrower than the sole, so no side face is coplanar with it.
+        add_box(bm, V(0.0, sy * 0.287, -0.034), (0.492, 0.030, 0.034))
+        add_box(bm, V(0.0, sy * 0.300, -0.062), (0.492, 0.020, 0.030))
+    fin()
+    # The exciter: a round housing across the plate on a flange.
+    bm, fin = m.part(H, "Exciter", "Engine", bevel=0.003)
+    add_box(bm, V(0.0, -0.020, -0.024 + SINK - 0.008), (0.260, 0.140, 0.016))
+    add_cone(bm, V(0.0, -0.020, -0.074), X, 0.050, 0.050, 0.240, 10)
+    fin()
+    # The frame: four posts off the plate and a deck the engine bolts to. The
+    # deck stops at y 0.07, just short of where the handle tubes climb past it.
+    bm, fin = m.part(H, "Frame", "Engine", bevel=0.003)
+    for sx in (-1.0, 1.0):
+        for py in (-0.200, 0.020):
+            add_box(bm, V(sx * 0.175, py, -0.021 - 0.065), (0.030, 0.030, 0.130))
+    add_box(bm, V(0.0, -0.080, -0.155), (0.400, 0.300, 0.016))
+    fin()
+    # The petrol engine, with a dark air filter on its -X side.
+    bm, fin = m.part(H, "Engine", "Hub", bevel=0.006)
+    add_box(bm, V(0.0, -0.070, -0.163 + SINK - 0.090), (0.260, 0.240, 0.180))
+    fin()
+    bm, fin = m.part(H, "Filter", "Engine", bevel=0.004)
+    add_box(bm, V(-0.158, -0.060, -0.280), (0.060, 0.120, 0.100))
+    fin()
+    # The tank / cowl on top and the belt guard down the +X side, in tool
+    # orange: the colour that says "this is the machine" at a glance.
+    bm, fin = m.part(H, "Cowl", "ToolOrange", bevel=0.010)
+    add_box(bm, V(0.0, -0.060, -0.340 + SINK - 0.050), (0.340, 0.300, 0.100))
+    fin()
+    bm, fin = m.part(H, "BeltGuard", "ToolOrange", bevel=0.006)
+    add_box(bm, V(0.215, -0.070, -0.190), (0.036, 0.220, 0.290))
+    fin()
+    bm, fin = m.part(H, "FuelCap", "Black", bevel=0.002)
+    add_cone(bm, V(0.080, -0.120, -0.437 + SINK - 0.014), Z, 0.028, 0.024, 0.028, 10)
+    fin()
+    m.mesh_node(H)
+    B = "Body"
+    # Rubber isolation mounts on the frame's rear posts, where the tubes root.
+    bm, fin = m.part(B, "Mounts", "Black", bevel=0.002)
+    for sx in (-1.0, 1.0):
+        add_cone(bm, V(sx * 0.1475, 0.020, -0.105), X, 0.028, 0.028, 0.040, 8)
+    fin()
+    # Two steel tubes from the mounts, near the origin line, back and up to the
+    # hands, with a cross brace.
+    bm, fin = m.part(B, "Handle", "Steel", bevel=0.003)
+    for sx in (-1.0, 1.0):
+        add_tube(bm, V(sx * 0.130, 0.020, -0.110), V(sx * 0.180, 0.950, -0.800), 0.016, 8)
+    add_tube(bm, V(-0.1575, 0.532, -0.490), V(0.1575, 0.532, -0.490), 0.013, 8)
+    fin()
+    m.mesh_node(B)
+    bm, fin = m.part("Grip", "Bar", "Black", bevel=0.003)
+    add_tube(bm, V(-0.220, 0.950, -0.800), V(0.220, 0.950, -0.800), 0.020, 8)
+    fin()
+    m.mesh_node("Grip")
+    m.empty("Tip", V(0.0, 0.0, 0.0), zdir=(0, 0, 1), xhint=(1, 0, 0))
+    m.note("0.50 x 0.56 steel sole, head 0.46 tall under a tool-orange cowl, two-tube handle to a 0.44 grip bar; origin at the sole")
+    return m
+
+
 BUILDERS = [
     ("Jackhammer", build_jackhammer),
     ("Sledge", build_sledge),
@@ -337,6 +423,7 @@ BUILDERS = [
     ("Jointer", build_jointer),
     ("Broom", build_broom),
     ("ComeAlong", build_come_along),
+    ("PlateCompactor", build_plate_compactor),
 ]
 
 

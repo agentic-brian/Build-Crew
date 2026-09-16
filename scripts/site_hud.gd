@@ -215,16 +215,29 @@ func pad_visible(key: String) -> bool:
 
 ## A round button in the bottom-LEFT corner, `s` across. Both it and NEXT share
 ## ONE centre - the GO button's - however big each is.
+## GO and NEXT stand in the same corner the "down" pad uses, so both walk in off
+## the same insets (6.4) or the child's learned spot moves between beats.
+func place_in_safe_area() -> void:
+	super()
+	if _go != null:
+		_corner(_go, go_size)
+	if _next != null:
+		_corner(_next, start_size * 0.8)
+
+
 func _corner(button: Button, s: float) -> void:
-	var c := corner_margin + go_size * 0.5
+	var safe := SafeArea.insets(get_viewport())
+	var left := corner_margin + safe.x
+	var bottom := corner_margin + safe.w
+	var c := left + go_size * 0.5
 	button.anchor_left = 0.0
 	button.anchor_right = 0.0
 	button.anchor_top = 1.0
 	button.anchor_bottom = 1.0
 	button.offset_left = c - s * 0.5
 	button.offset_right = c + s * 0.5
-	button.offset_top = -go_size - corner_margin + (go_size - s) * 0.5
-	button.offset_bottom = -corner_margin - (go_size - s) * 0.5
+	button.offset_top = -go_size - bottom + (go_size - s) * 0.5
+	button.offset_bottom = -bottom - (go_size - s) * 0.5
 	button.pivot_offset = Vector2(s, s) * 0.5
 
 
@@ -628,7 +641,11 @@ func _aim_screen(world: Vector3) -> void:
 	if p.z <= 0.0:
 		return
 	var at := Vector2(p.x, p.y)
-	if not Rect2(Vector2.ZERO, frame).grow(-hint_margin).has_point(at):
+	# The band the hardware takes is not the picture (6.4): a mime drawn on a
+	# phone's Island is a mime nobody sees.
+	var ins := SafeArea.insets(get_viewport())
+	var safe := Rect2(Vector2(ins.x, ins.y), frame - Vector2(ins.x + ins.z, ins.y + ins.w)).grow(-hint_margin)
+	if not safe.has_point(at):
 		return
 	var fit := clampf(p.z / SpotRings.NOMINAL_M, 0.5, 3.0)
 	var r_px := hint_size_for(_aim_radius) * 0.5 * fit * pixels_per_metre(frame, p.z)
@@ -638,7 +655,7 @@ func _aim_screen(world: Vector3) -> void:
 		_hint_dir_for = world
 		_aim_dir = Vector2.UP
 		var reach := _aim_touch + _aim_size * hint_scale * (HintArrow.BACK + HintArrow.BACK_OFF)
-		if at.y - reach < hint_margin:
+		if at.y - reach < safe.position.y + hint_margin:
 			_aim_dir = Vector2.DOWN
 	_aim_at = at
 

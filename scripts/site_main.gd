@@ -23,11 +23,19 @@ extends Node3D
 ##   --step=7         put the runner on step 7 (with --stage)
 ##   --shot=SURFACE   snap the camera to a named shot
 ##   --nohud          take the HUD off, for a clean picture of the lot
+##   --done=2         with --stage, that many of the step's places done
+##   --places=3,1     and WHICH ones (the rows a child takes in any order)
+##   --seed=N         the visit's look (6.1); a harness with no seed gets 0,
+##                    the legacy lot every earlier picture was taken of
+##   --car=Pickup --paint=K --house=K --cracks=B   one field of the look, for
+##                    a critic's frame of one car or one house
 
 ## The job is finished (the broom is done): the payoff is about to play.
 signal job_done
 ## The payoff is over and NEXT is up.
 signal ready_for_next
+## NEXT was pressed inside a harness, where there is no scene to cut to.
+signal next_requested
 
 const JOB_DIR := "res://data/jobs/"
 const STREET_MODELS := "res://assets/models/street/"
@@ -40,6 +48,12 @@ const KERB_Z := 5.9
 ## The top of the footway either side of the drive (its box is 0.13 tall,
 ## centred at 0.03); the crossing between them is at grade.
 const FOOTWAY_TOP := 0.095
+## How far past the slab's end the cones stand for the cure: their 36 cm bases
+## clear of the kerb board's trench (the crossing starts behind it since the
+## plan's fifth session) and on the crossing and the road's edge beyond it, which
+## is a centimetre higher - the crossing between the trench and the road is only
+## 28 cm deep, measured, so no spot on it alone holds a cone.
+const CONE_MOUTH_OUT := 0.40
 ## How far the grass reaches. Generous, because the camera sees a long way down
 ## the street in the WIDE and STREET shots and the first renders ended the world
 ## in open frame - a hard green edge against the sky behind the house.
@@ -115,35 +129,60 @@ const TOOL_REST := {
 	"broom": Vector3(5.2, 0.30, 1.2),
 	"hose": Vector3(5.2, 0.25, 0.6),
 	"rake": Vector3(5.2, 0.30, 0.0),
+	# The plate compactor never rests here in play: it stands on the base for its
+	# phase (`hold_plate`) and is lifted off at the end. The rest is for the
+	# frame before its first bay is armed.
+	"plate": Vector3(5.4, 0.0, -0.6),
 }
 
 ## Which step of the job each `--stage` poses at, so a screenshot of phase 8 does
-## not mean playing phases 1 to 7.
-## `poured` is 10 - the POUR beat itself - and not 12, the beat after it. A stage
-## should pose the step that PRODUCES it wherever there is a choice, because the
-## step is what puts the controls on screen: at 12 the picture of the pour had no
-## steering pads in it, which is the one thing that phase needs to show.
-## Eighteen steps since the rebar and the come-along (2026-09-14): 0 jack,
-## 1 call skid, 2 push, 3 skid off, 4 forms, 5 stakes, 6 call dump, 7 tip,
-## 8 dump off, 9 REBAR, 10 call mixer, 11 pour, 12 RAKE, 13 mixer off, 14 water,
-## 15 screed, 16 joints, 17 broom. `based` poses the rebar beat (the base is what
-## it stands on); `rebar` poses the mixer button, and `--stage=rebar --step=11
-## --shot=CHUTE --hold` is the pour; `banded` poses the rake.
+## not mean playing phases 1 to 7: the VERB of that step and which of that
+## verb's rows it is (`JobDef.index_of`), never a number. Numbers rotted every
+## time a beat was added - the fifth session added seven rows (the trucks' held
+## reverse, the compactor, the kerb board's own pair, the cure and the strip),
+## and every `--step=11` in the docs meant a different beat overnight.
+## A stage poses the step that PRODUCES it wherever there is a choice, because
+## the step is what puts the controls on screen. `based` poses the rebar beat
+## (the base is what it stands on); `rebar` poses the mixer button, and
+## `--stage=rebar --step=pour_chute --shot=CHUTE --hold` is the pour; `banded`
+## poses the rake. `tipped` is the compactor, `packed` the kerb board waiting,
+## `kerbed` its two pegs, `cured` the strip. `done` and `parked` are past the
+## last step (`stage_step` answers the step count for them); see `pose`.
 const STAGE_STEP := {
-	"old": 0, "broken": 1, "cleared": 4, "formed": 5, "staked": 6,
-	"based": 9, "rebar": 10, "banded": 12, "poured": 14, "sprayed": 15,
-	"screeded": 16, "jointed": 17,
-	# 17, not 18: at 18 the runner is PAST the last step, so there is no current
-	# step, no anchor for an anchored shot, and `CameraRig` silently reads the
-	# offset as a world position - putting the camera out on the lawn. Every
-	# judgement anyone made from `--stage=done --shot=SURFACE` was made through a
-	# camera the game never uses.
-	"done": 17, "parked": 17,
+	"old": ["jack_spot", 1], "broken": ["call_skid", 1], "cleared": ["form_set", 1],
+	"formed": ["stake_drive", 1], "staked": ["call_dump", 1],
+	"tipped": ["compact_base", 1], "packed": ["form_set", 2], "kerbed": ["stake_drive", 2],
+	"based": ["rebar_lay", 1], "rebar": ["call_mixer", 1], "banded": ["rake_pull", 1],
+	"poured": ["spray_water", 1], "sprayed": ["screed_pull", 1], "screeded": ["joint_cut", 1],
+	"jointed": ["broom_finish", 1], "cured": ["form_strip", 1],
+	"done": ["", 0], "parked": ["", 0],
 }
 
 @export var config: SiteConfig
 ## Which job to play, by file name in `data/jobs/`.
 @export var job_name: String = "new_driveway"
+
+@export_group("A backdrop, not a game")
+## This lot is the picture BEHIND THE TITLE ROW (the improvement plan's 6.3),
+## not a job: it poses itself and then stands there. No HUD, no music, no
+## input, no runner beats - and it never reads or writes the child's save.
+##
+## Set on the instantiated root BEFORE `add_child`: `_enter_tree` runs on
+## `add_child` and the driveway builds in its OWN `_ready`, so a flag set after
+## is a flag that did nothing. It exists so the title never has to set
+## `shot_args`, which is process-global and would follow the child into the job.
+@export var dress_only: bool = false
+## Which visit the backdrop shows, and where it stands (the same stage and shot
+## names a screenshot uses).
+@export var dress_seed: int = SiteLook.LEGACY_SEED
+@export var dress_stage: String = "old"
+@export var dress_shot: String = "WIDE"
+## Pose the backdrop AT THE SAVE instead of at `dress_stage`, and let the title
+## ask `resume_ready()` afterwards: the same `SiteMain` that would play the job
+## judges the save, so the title can never offer to carry on a job the level
+## would refuse.
+@export var dress_from_save: bool = false
+@export_group("")
 
 var drive: Driveway
 var camera: CameraShake
@@ -228,6 +267,11 @@ const MISS_SOUND_GAP := 0.25
 const HONK_GAP := 0.6
 var _miss_at_s: float = -10.0
 var _honk_at_s: float = -10.0
+## How long the parked car's last answered tap sounds for.
+var _car_voice_len: float = 0.0
+## A finger pressed on a truck still coming down the street, and still down: it
+## backs the truck in the moment the truck stops (the plan's 1.8).
+var _carry_back: bool = false
 ## Where the pour's band starts along the drive, written by the pour beat, so
 ## the level can say which pad would move the concrete toward the emptiest
 ## cell (the plan's 2.1).
@@ -236,6 +280,11 @@ var pour_band_from: float = -INF
 ## beat, so the arrow stands on it and a press is measured against it wherever
 ## it has got to (the plan's 2.5). INF when no such beat runs.
 var drag_tool_at: Vector3 = Vector3.INF
+## Where the plate compactor stands on the base (5.1), INF before its phase.
+var _plate_at: Vector3 = Vector3.INF
+var _plate_view: Marker3D
+## How high the plate rides on loose stone before the patch under it is packed.
+const PLATE_RIDE := 0.02
 ## The white idle arrow's wake rule: a finger that moves this far since it
 ## last woke the hint wakes it again; a resting finger's twitch does not.
 const HINT_WAKE_PX := 6.0
@@ -259,10 +308,130 @@ var _posed: bool = false
 var _no_hud: bool = false
 var _no_machine: bool = false
 
+## The visit (the improvement plan's 6.1): one number, and the look drawn from
+## it (`SiteLook.for_seed`) - the car, its paint and voice, the house and
+## garage walls, the old drive's cracks. Resolved in `_enter_tree`, before the
+## driveway child builds its panels in its own `_ready`.
+var play_seed: int = SiteLook.LEGACY_SEED
+var look: Dictionary = SiteLook.for_seed(SiteLook.LEGACY_SEED)
+## Where the seed came from, for the log: next, save, arg, harness or fresh.
+var seed_from: String = ""
+## The next visit's seed, left for the site that opens next - by the title's
+## seat, or by a harness. Process memory only, never a file (6.2's privacy line).
+const NEXT_SEED_META := "bc_next_seed"
+## What the title row chose: `{"job": String, "carry_on": bool}`. Read and
+## removed by `_enter_tree`; process memory only.
+const PICK_META := "bc_job_pick"
+## The seed of the visit just FINISHED, left for the title so the reward is
+## still standing behind the next choice (6.3). Read and removed by the title.
+const LAST_SEED_META := "bc_last_seed"
+## Where NEXT and the house go (6.3).
+const TITLE_SCENE := "res://scenes/main.tscn"
+## What NEXT calls once it has cleared the save: the cut back to the title row.
+## Empty is a real scene change; the smoke puts a flag here, because a scene
+## change from inside it would take the test's own scene away.
+var leave_scene: Callable = Callable()
+## Whether this run reads and writes the save (6.2): the child's game, or a test
+## that pointed `SaveGame.path_override` at a scratch file. Never a posed run.
+var _saves: bool = false
+## The saved place this visit resumes at (`resume_point`), or {} for a fresh job.
+var _resume: Dictionary = {}
+## The job file this run plays, as the save names it.
+var _job_file: String = ""
+## Whether the title's seat said "carry on" (6.3). The save's own branch in
+## `_enter_tree` does the real work; this is what the picker meant, for the log
+## and for the tests.
+var _carried_on: bool = false
+var _entered: bool = false
+
+
+## Before the children are ready: the driveway builds its panels in its OWN
+## `_ready`, which runs before this node's, so the seed that picks its cracks
+## has to be in place by now or the first build silently keeps the legacy drive.
+##
+## The seed, in order: a BACKDROP's own (`dress_only`, which takes neither meta
+## and may read the save to pose at it), then the one NEXT drew (a new visit),
+## the save's (a resumed job keeps its drive under its stakes), `--seed`, 0 for
+## any other harness (the legacy lot every earlier picture was taken of), and
+## otherwise a fresh draw.
+func _enter_tree() -> void:
+	if _entered:
+		return
+	_entered = true
+	var args: Dictionary = Engine.get_meta("shot_args", {}) as Dictionary
+	# What the title row chose, if the child came through one (6.3). Taken, so
+	# the next site in this process starts from its own decision.
+	var pick: Dictionary = {}
+	if Engine.has_meta(PICK_META):
+		pick = Engine.get_meta(PICK_META) as Dictionary
+		Engine.remove_meta(PICK_META)
+	_carried_on = bool(pick.get("carry_on", false))
+	_job_file = String(pick.get("job", args.get("job", job_name)))
+	job = _load_job(_job_file)
+	_saves = saves_on(args)
+	var seed := -1
+	if dress_only:
+		# NEITHER meta is taken: whichever `SiteMain` enters first CONSUMES
+		# `bc_next_seed`, and a backdrop that ate it would hand the child a
+		# different visit from the one they pressed.
+		if dress_from_save and SaveGame.enabled:
+			_resume = resume_point(SaveGame.load_data())
+		seed = int(_resume["seed"]) if not _resume.is_empty() else dress_seed
+		seed_from = "dress"
+	if seed < 0 and not dress_only and Engine.has_meta(NEXT_SEED_META):
+		seed = SiteLook.parse_seed(Engine.get_meta(NEXT_SEED_META))
+		Engine.remove_meta(NEXT_SEED_META)
+		seed_from = "next"
+	if seed < 0 and not dress_only and _saves:
+		_resume = resume_point(SaveGame.load_data())
+		if not _resume.is_empty():
+			seed = int(_resume["seed"])
+			seed_from = "save"
+	if seed < 0 and not dress_only and args.has("seed"):
+		seed = SiteLook.parse_seed(args["seed"])
+		seed_from = "arg"
+		if seed < 0:
+			push_warning("SiteMain: --seed=%s is not a seed 0..%d; the legacy lot" % [str(args["seed"]), SiteLook.SEED_MAX])
+	if seed < 0 and not dress_only and Engine.has_meta("shot_args"):
+		seed = SiteLook.LEGACY_SEED
+		seed_from = "harness"
+	if seed < 0:
+		seed = SiteLook.draw_fresh({})
+		seed_from = "fresh"
+	play_seed = seed
+	look = SiteLook.for_seed(seed)
+	_look_overrides(args)
+	var d := get_node_or_null("Driveway") as Driveway
+	if d != null:
+		d.crack_base = int(look["crack_base"])
+
+
+## A critic's frame of one field of the look: `--car=Pickup` (and `--paint=K`,
+## that car's K-th paint), `--house=K` (a swatch), `--cracks=B` (a base from
+## `SiteLook.CRACK_BASES`). A harness never saves, so nothing unseeded persists.
+func _look_overrides(args: Dictionary) -> void:
+	if args.has("car"):
+		var row := SiteLook.car_row(String(args["car"]))
+		if row.is_empty():
+			push_warning("SiteMain: no home car '%s'" % str(args["car"]))
+		else:
+			look["car"] = String(row["name"])
+			look["voice"] = String(row["voice"])
+			var paints: Array = row["paints"]
+			look["paint"] = Color(0, 0, 0, 0) if paints.is_empty() \
+				else paints[clampi(int(str(args.get("paint", "0"))), 0, paints.size() - 1)]
+	if args.has("house"):
+		var sw := clampi(int(str(args["house"])), 0, SiteLook.HOUSE_SWATCHES.size() - 1)
+		look["house_swatch"] = sw
+		look["house"] = SiteLook.HOUSE_SWATCHES[sw][0]
+		look["garage_wall"] = SiteLook.HOUSE_SWATCHES[sw][1]
+	if args.has("cracks") and str(args["cracks"]).is_valid_int():
+		look["crack_base"] = int(str(args["cracks"]))
+
 
 func _ready() -> void:
 	var args: Dictionary = Engine.get_meta("shot_args", {}) as Dictionary
-	_no_hud = args.has("nohud")
+	_no_hud = args.has("nohud") or dress_only
 	_no_machine = args.has("nomachine")
 	if config == null:
 		config = load("res://data/site_config.tres") as SiteConfig
@@ -318,7 +487,8 @@ func _ready() -> void:
 			runner.press_button("call"))
 		hud.next_pressed.connect(_on_next)
 		hud.home_pressed.connect(_on_home)
-	job = _load_job(String(args.get("job", job_name)))
+	if job == null:
+		job = _load_job(String(args.get("job", job_name)))
 	runner.setup(self, hud, rig, config, verbs)
 	runner.tools = tools
 	runner.beat_done.connect(func(p: int) -> void:
@@ -329,9 +499,83 @@ func _ready() -> void:
 	if hud != null and job != null:
 		hud.set_total_steps(job.total_weight())
 		hud.set_step(0)
-	if sfx != null and sfx.has_method("start_music"):
+	if sfx != null and sfx.has_method("start_music") and not dress_only:
+		# A backdrop starts no song: the title owns the music, and two `Sfx`
+		# nodes would play two (`Sfx.start_music` only refuses a second on the
+		# SAME node).
 		sfx.start_music("site")
+	if Engine.has_meta("shot_args"):
+		# Every harness log names the world it drew.
+		print("SITE_LOOK seed %d (%s) car %s paint %s house %d cracks %d saves %s" % [play_seed, seed_from,
+			String(look["car"]), str(look["paint"]), int(look["house_swatch"]), int(look["crack_base"]), str(_saves)])
+	if dress_only:
+		# Posed, then still: no beats are played, nothing is written, and a
+		# finger on the picture belongs to the row in front of it.
+		_start(_dress_args())
+		_undress()
+		# Nothing about a backdrop ticks: `_process` presses the pour's hold every
+		# frame from the row it is posed on (the PAD branch calls `runner.hold`
+		# with no finger at all), and a picture behind a menu must not work.
+		set_process(false)
+		set_process_unhandled_input(false)
+		return
 	_start(args)
+	# AFTER the start: `runner.start` enters step 0, and connected before it that
+	# entry would write (0, 0) over a job the child has not finished (6.2).
+	runner.place_changed.connect(func(_i: int, _d: int) -> void: _write_progress())
+
+
+## Everything a POSE puts on a working site that a picture behind a menu must
+## not have: the gold rings and the arrow (they say "tap here", and the thing to
+## tap is the disc in front), and the tools (the row is not a beat).
+func _undress() -> void:
+	if _rings != null:
+		_rings.clear_rings()
+	if _pointer != null:
+		_pointer.clear_rings()
+	if hud != null:
+		hud.hide_arrow()
+		# The pour's steering pads are ARMED by the pose, and a hidden pad still
+		# eats the touch over it: `ToyHud._input` is a raw `_input` that a
+		# CanvasLayer's `visible` does not gate, and its buttons answer by
+		# `enabled`, not by being drawn. A job saved at the pour would have put
+		# an invisible pad exactly where the title's corner disc stands.
+		hud.show_pads([])
+		hud.set_pads_enabled(false)
+		hud.set_process_input(false)
+		hud.set_process_unhandled_input(false)
+		hud.visible = false
+	for kind: String in tools:
+		var t := tools[kind] as Node3D
+		if t != null:
+			t.visible = false
+	# And nothing runs on under it: a pose at the come-along starts the drum and
+	# the pour loops, which would idle under the title for as long as it stood.
+	if sfx != null and sfx.has_method("stop_all"):
+		sfx.stop_all()
+
+
+## The pose a backdrop opens at: its stage, or - when the title asked it to read
+## the save - the row and the places the child left, as PLAY leaves them.
+func _dress_args() -> Dictionary:
+	var a: Dictionary = {"stage": dress_stage, "shot": dress_shot, "nohud": true}
+	if not _resume.is_empty():
+		var at := int(_resume["step"])
+		var ids := PackedStringArray()
+		for v in (_resume["places"] as Array):
+			ids.append(str(int(v)))
+		a["stage"] = stage_for_step(at)
+		a["step"] = str(at)
+		a["done"] = int(_resume["done"])
+		a["places"] = ",".join(ids)
+		a["play"] = true
+	return a
+
+
+## Is there a job to carry on with? Asked by the title, of the backdrop, after
+## it has read the save (`dress_from_save`).
+func resume_ready() -> bool:
+	return not _resume.is_empty()
 
 
 ## Either play the job from the top, or pose it for a screenshot or a test.
@@ -341,7 +585,13 @@ func _start(args: Dictionary) -> void:
 		return
 	var stage := String(args.get("stage", ""))
 	if stage != "":
-		pose(stage, int(args.get("step", STAGE_STEP.get(stage, 0))), int(args.get("done", 0)))
+		var places: Array = []
+		for bit in String(args.get("places", "")).split(",", false):
+			if bit.strip_edges().is_valid_int():
+				places.append(int(bit))
+		# `play` poses the world as PLAY leaves that row - no picture tricks -
+		# which is what a resumed job and the title's backdrop want.
+		pose(stage, step_arg(String(args.get("step", "")), stage), int(args.get("done", 0)), places, args.has("play"))
 		if args.has("shot"):
 			# `--eye=x,y,z` / `--look=x,y,z` try other offsets for the named shot
 			# without an edit per render (the critic loop's camera work).
@@ -414,6 +664,9 @@ func _start(args: Dictionary) -> void:
 					if n is Node3D:
 						(n as Node3D).visible = false
 		return
+	if not _resume.is_empty():
+		resume(_resume)
+		return
 	runner.start(job, drive, false)
 	# The job OPENS on the wide - the house, the cracked drive, the tools, the
 	# first slab's rings lit - and holds there before the eye comes down to
@@ -428,13 +681,22 @@ func _start(args: Dictionary) -> void:
 ## Poses the whole level at the start of a phase, with no animation: the world
 ## through `Driveway.pose_stage`, the machines where that phase has them, and the
 ## runner on the step that phase begins with.
-func pose(stage: String, step: int = -1, done: int = 0) -> void:
-	_posed = true
+##
+## `places` names WHICH of the step's first `done` places are done, for the rows
+## a child takes in any order (6.2); empty is the canonical order every earlier
+## `--done` picture was taken with. (The jackhammer and the push had no `--done`
+## pose before the sixth session; they have one now, the jackhammer's in that
+## same first-open-place order.) `play` is a resumed job rather than a
+## picture: none of the picture's tricks - the tool posed mid-work in its own
+## shot, the truck hidden for the pour, the blade down - only the world as play
+## leaves it when the row opens (`resume`).
+func pose(stage: String, step: int = -1, done: int = 0, places: Array = [], play: bool = false) -> void:
+	_posed = not play
 	drive.pose_stage(stage)
-	var at := step if step >= 0 else int(STAGE_STEP.get(stage, 0))
+	var at := step if step >= 0 else stage_step(stage)
 	# The job is OVER in both end states: the bar full, no arrow, no tool.
 	# Posed at the broom's step they showed 95.8% (round 10).
-	if (stage == "done" or stage == "parked") and step <= int(STAGE_STEP.get(stage, 0)):
+	if stage == "done" or stage == "parked":
 		at = job.steps.size()
 	# `--nomachine` leaves the site empty: the machine that works a phase parks
 	# ON the driveway and hides the very thing the phase changed, so there is no
@@ -481,6 +743,11 @@ func pose(stage: String, step: int = -1, done: int = 0) -> void:
 		wants = {"cleared": "SkidSteer", "banded": "ConcreteTruck"}.get(stage, "")
 	if wants != "":
 		_park_machine(wants)
+	# A truck waiting in the road to be backed in (1.8): where play's street leg
+	# stops it and facing the way play turns it, from the same helpers, so a
+	# `--hold` picture drives the route play drives.
+	if posed != null and SiteVerbs.BACK_VERBS.has(posed.verb):
+		_stage_at_street(String(SiteVerbs.BACK_VERBS[posed.verb]))
 	# Open from the moment the skid steer is on site until the cure shuts it, which
 	# is what play does: posing it shut put a closed garage door behind the pour,
 	# the joints and the broom, in every picture anybody judged them from.
@@ -488,11 +755,19 @@ func pose(stage: String, step: int = -1, done: int = 0) -> void:
 		set_garage_door(1.0)
 	runner.start(job, drive, false)
 	runner.pose_at(at, done)
-	_pose_tool(posed)
+	if not play:
+		_pose_tool(posed)
 	# The pour's own trick has to be posed too, or every picture of the centrepiece
 	# is of something the game never shows: the truck gone, the chute over the form,
 	# and the camera's own point sitting under the spout.
-	if posed != null and (posed.verb == "pour_chute" or posed.verb == "rake_pull"):
+	# A resumed POUR does none of it: its verb hides the truck itself once the eye
+	# is still. A resumed RAKE opens where play leaves the pour - the truck
+	# undrawn, the chute running, the drum turning - which the rake's own verb
+	# only sets up on the first press.
+	# ...but never for a BACKDROP: a menu standing in front of an undrawn truck
+	# is a chute floating in the road, and the loops this branch starts would run
+	# under the title for as long as it was up.
+	if posed != null and not dress_only 			and (posed.verb == "rake_pull" or (posed.verb == "pour_chute" and not play)):
 		var mixer := machine("ConcreteTruck")
 		if mixer != null:
 			mixer.set_chute(0.0, config.chute_fold_max)
@@ -503,20 +778,64 @@ func pose(stage: String, step: int = -1, done: int = 0) -> void:
 			set_pour_point(mixer.spout_world(), mixer.pour_point_world(Driveway.GRADE), mixer.spout_dir())
 			if args_shot_is(CameraRig.CHUTE):
 				rig.snap(CameraRig.CHUTE, runner.shot_anchor(CameraRig.CHUTE))
+			if play:
+				mixer.spin_drum(config.drum_rps)
+				mixer.set_beacon_on(true)
+				if sfx != null:
+					sfx.play_loop(SiteVerbs.SOUND_DRUM, "mixer")
+					sfx.play_loop(SiteVerbs.SOUND_CONCRETE, "concrete")
 	# A tap phase posed part-way (`--done=N`): the first N of its places are done,
 	# so a picture of the second pair of cross bars has the long bars under them.
 	if posed != null and done > 0:
 		match posed.verb:
+			# The hammer's spots, the boards, the pegs, the bars and the strip are
+			# the child's to take in any order: the places named, where they are
+			# still a legal pick (`_apply_places`).
+			"jack_spot":
+				_apply_places(posed.verb, places, done)
 			"rebar_lay":
 				drive.show_chairs(true)
-				for b in range(1, done + 1):
-					drive.set_bar(b, 1.0)
+				if not places.is_empty():
+					_apply_places(posed.verb, places, done)
+				else:
+					for b in range(1, done + 1):
+						drive.set_bar(b, 1.0)
+			# By STATE, never "places 1..done": the kerb board's own row posed
+			# with `--done=1` used to set board 1, which went in a phase ago (5.2).
 			"form_set":
-				for b in range(1, done + 1):
-					drive.set_form(b, 1.0)
+				if not places.is_empty():
+					_apply_places(posed.verb, places, done)
+				else:
+					for b in drive.live_open_forms().slice(0, done):
+						drive.set_form(b, 1.0)
 			"stake_drive":
+				if not places.is_empty():
+					_apply_places(posed.verb, places, done)
+				else:
+					var pegs := PackedInt32Array()
+					for g in range(drive.stake_group_count()):
+						pegs.append_array(drive.open_stakes_in(g))
+					for b in pegs.slice(0, done):
+						drive.set_stake(b, 1.0)
+			"push_rubble":
+				# The first lane on the heap, and the machine lined up on the
+				# second inside the garage with its blade down - where the first
+				# pass leaves it.
+				for lane in range(1, mini(done, drive.push_lanes()) + 1):
+					drive.push_lane(lane, Driveway.Z_KERB, true)
+				var skid_d := machine("SkidSteer")
+				if skid_d != null and done < drive.push_lanes():
+					skid_d.place(Vector3(drive.lane_drive_x(done + 1), 0.0, Driveway.Z_APRON - config.garage_stand), 0.0)
+					skid_d.global_position.y = _ground_y(skid_d.global_position)
+			"compact_base":
 				for b in range(1, done + 1):
-					drive.set_stake(b, 1.0)
+					drive.pack_bay(b)
+			"form_strip":
+				if not places.is_empty():
+					_apply_places(posed.verb, places, done)
+				else:
+					for b in drive.open_strip_forms().slice(0, done):
+						drive.strip_form(b, 1.0)
 			"joint_cut":
 				for j in range(1, done + 1):
 					drive.cut_joint(j, 1.0)
@@ -526,12 +845,18 @@ func pose(stage: String, step: int = -1, done: int = 0) -> void:
 		runner.pose_at(at, done)
 		# Again, now the first N are down: the sledge was posed over stake 1,
 		# which `--done` has just driven (4.2).
-		_pose_tool(posed)
+		if not play:
+			_pose_tool(posed)
 	# The push, posed: blade down on the dirt, as it is the moment the child holds.
+	# Resumed, the machine is as play leaves it: carried high after the drive in,
+	# down on the next lane after a pass.
 	if posed != null and posed.verb == "push_rubble":
 		var skid := machine("SkidSteer")
 		if skid != null:
-			skid.set_bucket(0.0, 0.0)
+			if play and done == 0:
+				skid.set_bucket(1.0, 0.30)
+			else:
+				skid.set_bucket(0.0, 0.0)
 	# The rebar, posed: the chairs are down and the live group waits in the air.
 	if posed != null and posed.verb == "rebar_lay":
 		drive.show_chairs(true)
@@ -541,11 +866,17 @@ func pose(stage: String, step: int = -1, done: int = 0) -> void:
 	# The cure gets the LAST word. `pose_at` calls `present_tool` and `_pose_tool`,
 	# which put the final beat's tool back at full strength - so a cure run before
 	# them faded nothing and the broom lay on the lawn of a finished driveway.
-	if stage == "parked":
+	if stage == "parked" or stage == "cured" or stage == "done":
 		_cure(1.0)
-	if stage == "done":
+	if stage == "cured" or stage == "done":
+		# The broom lying on the grass where its phase put it, as play leaves it
+		# until the cut.
+		var broom_t := tool_node("broom")
+		if broom_t != null:
+			broom_t.visible = true
+			broom_t.hover_instant(TOOL_REST["broom"], Vector3.FORWARD, Vector3.UP)
 		# The cure's shape (3.4), posed: the cones across the mouth of the
-		# drive, where play slides them the moment the tada sounds.
+		# drive, where the cure beat slides them, through the strip.
 		var posts := _cone_posts()
 		for i in range(posts.size()):
 			posts[i].global_position = _cone_mouth(i)
@@ -566,6 +897,33 @@ func args_shot_is(shot_name: String) -> bool:
 	return String(args.get("shot", "")) == shot_name
 
 
+## The step a `--stage` poses, looked up by its verb (`STAGE_STEP`): the job's
+## step count for `done` and `parked`, 0 for a stage nobody named.
+func stage_step(stage: String) -> int:
+	if job == null or not STAGE_STEP.has(stage):
+		return 0
+	var want: Array = STAGE_STEP[stage]
+	if String(want[0]) == "":
+		return job.steps.size()
+	return maxi(job.index_of(String(want[0]), int(want[1])), 0)
+
+
+## A `--step` argument: a number, a verb (`pour_chute`), or a verb and which of
+## its rows (`form_set:2`). Empty asks the stage.
+func step_arg(value: String, stage: String) -> int:
+	if value == "":
+		return stage_step(stage)
+	if value.is_valid_int():
+		return int(value)
+	var bits := value.split(":", false)
+	var nth := int(bits[1]) if bits.size() > 1 and bits[1].is_valid_int() else 1
+	var i := job.index_of(bits[0], nth) if job != null else -1
+	if i < 0:
+		push_warning("SiteMain: no step plays '%s'" % value)
+		return stage_step(stage)
+	return i
+
+
 ## Puts the posed step's TOOL where its verb would hold it, instead of leaving it
 ## lying on the grass.
 ##
@@ -583,13 +941,14 @@ func _pose_tool(step: JobStep) -> void:
 	# A tool held in the child's HANDS (the hose, the broom, the rake) is only
 	# there in that beat's own shot: posed into a WIDE it was a tenth-size hose
 	# spraying in mid-air over the apron (round 5).
-	if step.verb in ["spray_water", "broom_finish", "rake_pull"] and not args_shot_is(step.shot):
+	if step.verb in ["spray_water", "broom_finish", "rake_pull", "compact_base"] and not args_shot_is(step.shot):
 		t.visible = false
 		return
 	t.visible = true
 	match step.verb:
 		"jack_spot":
-			var spot := drive.spot_marker(1)
+			# Over the first spot still to do (`--places` can have done spot 1).
+			var spot := drive.spot_marker(maxi(drive.first_open_spot(drive.current_panel()), 1))
 			if spot != null:
 				t.hover_instant(spot.global_position, Vector3.DOWN, Vector3.FORWARD)
 		"stake_drive":
@@ -629,6 +988,12 @@ func _pose_tool(step: JobStep) -> void:
 			t.hover_instant(jpt, Vector3.DOWN, (jh - jpt).normalized())
 			t.aim_handle_at(jh)
 			t.align_head(Vector3.RIGHT)
+		"compact_base":
+			var pbay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
+			set_plate_view(drive.plate_start(pbay))
+			if args_shot_is(CameraRig.PLATE):
+				rig.snap(CameraRig.PLATE, _plate_view)
+			hold_plate(t, drive.plate_start(pbay), pbay, false)
 		"broom_finish":
 			var bay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
 			var band := drive.bay_range(bay)
@@ -778,8 +1143,14 @@ func _build_street() -> void:
 	# the pour and the finished slab underneath itself.
 	# It starts BEHIND the kerb-end board (not around it): with the board
 	# buried in the crossing their tops and faces z-fought.
-	add_child(_box("Crossing", Vector3(Driveway.WIDTH, 0.13, KERB_Z + 0.20 - (Driveway.Z_KERB + 0.09)),
-		Vector3(Driveway.CENTRE_X, -0.065, (Driveway.Z_KERB + 0.09 + KERB_Z + 0.20) * 0.5),
+	# ...and behind the kerb board's TRENCH since the plan's fifth session, the
+	# way the lawn starts behind the side ones: the kerb board's two pegs are
+	# driven in a close-up from the road now (5.2), and they stood in the
+	# crossing's concrete. The kerb bank fills the gap at grade before the cut
+	# and after the backfill, in the crossing's own grey.
+	var cross_from := Driveway.Z_KERB + 0.22
+	add_child(_box("Crossing", Vector3(Driveway.WIDTH, 0.13, KERB_Z + 0.20 - cross_from),
+		Vector3(Driveway.CENTRE_X, -0.065, (cross_from + KERB_Z + 0.20) * 0.5),
 		Color(0.64, 0.64, 0.62)))
 
 
@@ -790,7 +1161,12 @@ func _dress() -> void:
 	# overlapped the garage's by three metres, which is the "clips right into the
 	# house" in the user's fourth note: there were two buildings in the same place
 	# and a machine reversing into both of them.
-	_place(STREET_MODELS + "StarterHome.glb", "House", Vector3(-5.4, 0.0, -10.2), 180.0)
+	var house := _place(STREET_MODELS + "StarterHome.glb", "House", Vector3(-5.4, 0.0, -10.2), 180.0)
+	# The visit's wall paint (6.1), on a copy: the imported material is cached
+	# across NEXT and a paint written into it would stay on the next house.
+	var wall_paint: Color = look.get("house", Color(0, 0, 0, 0))
+	if house != null and wall_paint.a > 0.0:
+		_paint_named(house, "Equip_Trim", wall_paint)
 	_build_garage()
 	# On the verge behind the footway, not standing in the middle of it.
 	# Clear of the rubble heap (round 6: the heap grew to the size of the
@@ -835,7 +1211,8 @@ func _build_garage() -> void:
 	var front := Driveway.Z_APRON
 	var back := front - GARAGE_DEEP
 	var mid := (front + back) * 0.5
-	var wall := Color(0.88, 0.86, 0.80)
+	# The walls take the visit's swatch with the house (6.1): one property.
+	var wall: Color = look.get("garage_wall", Color(0.88, 0.86, 0.80))
 	var trim := Color(0.74, 0.72, 0.66)
 	var roof := Color(0.42, 0.36, 0.34)
 	var inside := Color(0.40, 0.35, 0.30)
@@ -1090,6 +1467,28 @@ func _park_machine(kind: String) -> void:
 		m.set_chute(0.0, config.chute_fold_max)
 
 
+## A truck posed where it waits in the road to be backed in (1.8), turned the way
+## the reverse leg starts, engine and beacon on as play leaves them.
+func _stage_at_street(kind: String) -> void:
+	var m := machine(kind)
+	if m == null:
+		return
+	m.visible = true
+	var stop := street_stop(kind)
+	var path := back_route(kind, stop)
+	var yaw := STREET_YAW
+	if path.size() >= 2:
+		var dir := path[1] - path[0]
+		dir.y = 0.0
+		if dir.length_squared() > 0.0001:
+			yaw = rad_to_deg(atan2(-dir.x, -dir.z))
+	m.place(stop, yaw)
+	m.global_position.y = _ground_y(m.global_position)
+	m.set_beacon_on(true)
+	if kind == "DumpTruck":
+		m.set_load(1.0)
+
+
 ## A path through a list of corners, with every corner ROUNDED so a machine's
 ## nose can be read off it. Each corner becomes a quadratic Bezier, which is the
 ## cheapest curve whose tangent is never ambiguous.
@@ -1150,8 +1549,10 @@ func drive_route(m: Machine, corners: Array, seconds: float,
 ## Brings a machine on. Both trucks REVERSE up the drive - down the street past
 ## the entrance, then back in, tail first - because that is how a tipper and a
 ## mixer really get onto a residential job and because it keeps their wheels off
-## what they are about to lay. The skid steer drives in forward and turns round on
-## the spot inside the garage, which is the one thing only a skid steer can do.
+## what they are about to lay. Since the plan's fifth session this brings a
+## truck as far as the road only: backing it in is the child's (`back_route`).
+## The skid steer drives in forward and turns round on the spot inside the
+## garage, which is the one thing only a skid steer can do, all on its own.
 func bring_machine(kind: String, seconds: float) -> void:
 	var m := machine(kind)
 	if m == null:
@@ -1168,7 +1569,6 @@ func bring_machine(kind: String, seconds: float) -> void:
 	# Its beacon turns from the street to the stop, with the engine (4.5).
 	m.set_beacon_on(true)
 	rig.go(CameraRig.STREET, null)
-	var cx := Driveway.CENTRE_X
 	if kind == "SkidSteer":
 		# The door goes up before the machine gets there, because a crew opens the
 		# garage before it needs it and because a door that opens under a machine
@@ -1183,29 +1583,100 @@ func bring_machine(kind: String, seconds: float) -> void:
 			Vector3(x, 0.0, Driveway.Z_KERB + 1.6), Vector3(pose[0])], seconds, false, 2.2)
 		m.spin_to(float(pose[1]), config.spin_time * 1.6)
 		await m.arrived
-	elif kind == "ConcreteTruck":
-		# Past the drive and then BACK, swinging its tail round to the kerb: it
-		# never leaves the road (DESIGN 2a). And it BEEPS while it backs - the
-		# one site sound every three-year-old already does with their mouth,
-		# in place of a borrowed cartoon boing (the plan's 3.5).
-		await drive_route(m, [OFF_STAGE, Vector3(cx - 7.0, 0.0, STREET_Z)],
-			seconds * 0.45, false, 2.4)
-		sfx.play_loop("reversebeep", "beeper")
-		await drive_route(m, [m.global_position, Vector3(cx, 0.0, STREET_Z + 3.6),
-			Vector3(pose[0])], seconds * 0.55, true, 2.6)
-		sfx.stop_loop("beeper")
-	else:
-		await drive_route(m, [OFF_STAGE, Vector3(cx - 7.0, 0.0, STREET_Z)],
-			seconds * 0.45, false, 2.4)
-		sfx.play_loop("reversebeep", "beeper")
-		await drive_route(m, [m.global_position, Vector3(cx, 0.0, STREET_Z - 0.8),
-			Vector3(pose[0])], seconds * 0.55, true, 2.8)
-		sfx.stop_loop("beeper")
+		finish_arrival(kind)
+		return
+	# A TRUCK comes past the drive and STOPS in the road, tail to it, lined up on
+	# the way it will back in - engine ticking over, beacon turning - and waits
+	# for the child to back it in (`SiteVerbs.back_dump`/`back_mixer`: the
+	# improvement plan's 1.8, decision 4). It used to back straight in on its
+	# own, beeping; the reverse is the child's hold now, and so is the beeper.
+	await drive_route(m, [OFF_STAGE, street_stop(kind)], config.street_time, false, 2.4)
+	await face_route(m, back_route(kind, m.global_position), true)
+
+
+## Where a truck stops in the road to wait for the child to back it in.
+func street_stop(_kind: String) -> Vector3:
+	return Vector3(Driveway.CENTRE_X - 7.0, 0.0, STREET_Z)
+
+
+## The reverse leg from `from` to where the truck works, its corners rounded
+## (the same corners and radii both trucks always backed in on). The mixer
+## swings its tail to the kerb and never leaves the road (DESIGN 2a); the
+## tipper backs the length of the drive.
+func back_route(kind: String, from: Vector3) -> Array[Vector3]:
+	var cx := Driveway.CENTRE_X
+	var pose := _work_pose(kind)
+	if kind == "ConcreteTruck":
+		return _route([from, Vector3(cx, 0.0, STREET_Z + 3.6), Vector3(pose[0])], 2.6)
+	return _route([from, Vector3(cx, 0.0, STREET_Z - 0.8), Vector3(pose[0])], 2.8)
+
+
+## Turns a machine on the spot to face the start of a path before it drives it,
+## when it is more than a degree off: the first held frame of a backing truck
+## must not snap its yaw (the mixer's corner starts 27 degrees round).
+func face_route(m: Machine, path: Array[Vector3], reverse: bool) -> void:
+	if m == null or path.size() < 2:
+		return
+	var dir := path[1] - path[0]
+	dir.y = 0.0
+	if dir.length_squared() < 0.0001:
+		return
+	var facing := -dir if reverse else dir
+	var want := rad_to_deg(atan2(facing.x, facing.z))
+	var off := absf(wrapf(want - rad_to_deg(m.rotation.y), -180.0, 180.0))
+	if off > 1.0:
+		m.spin_to(want, config.spin_time * clampf(off / 90.0, 0.2, 1.5))
+		await m.arrived
+
+
+## The end of an arrival: the engine off, the beacon dark, and the stop - a
+## truck's air brakes, the skid steer's old clunk (it has none).
+func finish_arrival(kind: String) -> void:
+	var m := machine(kind)
 	sfx.stop_loop("arrive")
-	m.set_beacon_on(false)
-	# A truck stops with a hiss of its air brakes; the skid steer, which has
-	# none, with its old clunk.
+	if m != null:
+		m.set_beacon_on(false)
 	sfx.play_group("clunk" if kind == "SkidSteer" else "hiss")
+
+
+## Where the gold ring and the white mime stand while a truck waits to be backed
+## in, and follow it while it rolls: the tipper's tailgate - the place the tip's
+## own ring stands, so the child touches the same spot twice - and the mixer's
+## tail.
+func arrival_hint(kind: String) -> Vector3:
+	var m := machine(kind)
+	if m == null:
+		return Vector3.INF
+	if kind == "DumpTruck":
+		var tail := m.marker(String(WORKING_END.get(kind, "")))
+		if tail != null:
+			return tail.global_position
+	return m.to_global(Vector3(0.0, 1.4, -(m.rear_overhang() + 0.4)))
+
+
+## Is a screen point on the truck this back-in beat brings? Its box, grown by
+## half a finger's reach but never by more than `tap_reach_m` of world at the
+## truck, and never less than a finger: the tap-on-target rule, which the honk's
+## plain half-reach (a metre and a half of road from the STREET eye) was not.
+func on_backing_truck(at: Vector2) -> bool:
+	var s := runner.current_step() if runner != null else null
+	if s == null or not SiteVerbs.BACK_VERBS.has(s.verb):
+		return false
+	return _on_truck(machine(String(SiteVerbs.BACK_VERBS[s.verb])), at)
+
+
+## Is a screen point on this machine by the tap-on-target rule: its box grown by
+## half a finger's reach, capped at `tap_reach_m` of world, floored at a finger?
+func _on_truck(m: Machine, at: Vector2) -> bool:
+	if m == null or not m.visible or camera == null or hud == null:
+		return false
+	var frame := get_viewport().get_visible_rect().size
+	var box := _world_box(m)
+	var mid := hud.project_into(frame, box.get_center())
+	if mid.z <= 0.0:
+		return false
+	var grow := clampf(config.tap_reach_m * hud.pixels_per_metre(frame, mid.z), _finger_px(), _reach_px() * 0.5)
+	return _box_under(m, at, grow)
 
 
 ## Sends it away again: forward out of the drive and off up the street the way it
@@ -1275,7 +1746,16 @@ func _rest_tools() -> void:
 ## left hanging in the picture for a beat that does not use it is the fault Car
 ## Garage's round 2 filed against a wrench floating over an empty bay.
 func present_tool(want: String, instant: bool = false) -> void:
+	# Past the job's last tool row (the cure, the strip), nothing is put away at
+	# a step: the broom stays lying on the grass where it went back, and goes
+	# with the rest of the kit at the cut to the street (`_clear_kit`). Hiding it
+	# as the cure row opened blinked it out on the wide (the verification pass).
+	var keep := ""
+	if (want == "" or want == "none") and _past_last_tool():
+		keep = _last_tool()
 	for kind: String in tools:
+		if kind == keep:
+			continue
 		var t := tools[kind] as HandTool
 		if kind != want:
 			t.visible = false
@@ -1285,6 +1765,27 @@ func present_tool(want: String, instant: bool = false) -> void:
 	t.visible = true
 	if instant:
 		t.hover_instant(TOOL_REST[want], Vector3.FORWARD, Vector3.UP)
+
+
+## The tool of the job's last row that uses one ("" when none does).
+func _last_tool() -> String:
+	if job == null:
+		return ""
+	for i in range(job.steps.size() - 1, -1, -1):
+		if job.steps[i].tool != "" and job.steps[i].tool != "none":
+			return job.steps[i].tool
+	return ""
+
+
+## Is the runner past the last row of the job that uses a tool?
+func _past_last_tool() -> bool:
+	if job == null or runner == null:
+		return false
+	var last := -1
+	for i in range(job.steps.size()):
+		if job.steps[i].tool != "" and job.steps[i].tool != "none":
+			last = i
+	return last >= 0 and runner.index > last
 
 
 func tool_node(want: String) -> HandTool:
@@ -1529,6 +2030,24 @@ func _define_shots() -> void:
 	# ground under the dragging finger.
 	rig.define(CameraRig.JOINT, "*", Vector3(0.0, 1.7, 2.8), Vector3(0.0, -0.45, -0.7))
 	rig.define(CameraRig.STREET, "", Vector3(-6.4, 5.4, 17.2), Vector3(3.0, 0.6, 7.4))
+	# THE PLATE COMPACTOR (the plan's 5.1): low, standing beyond the kerb edge of
+	# the bay being packed, looking up the drive toward the garage - so the bays
+	# already packed lie BEYOND the one being worked (before and after in one
+	# picture, like the screed's flat behind and lumpy in front), and the cut
+	# into the steel's first eye needs no half-turn. Anchored to the bay's own
+	# marker; still under the finger, stepping to the next bay between beats.
+	# From a little LEFT of the bay's line and tipped down onto it (four
+	# candidates rendered): square behind, the plate was its own handle's end
+	# and a garage filled the top half; from the rear quarter it is a machine -
+	# plate, engine, orange cowl - with the whole bay under it.
+	# ...and anchored to `PlateView`, which walks after the plate between
+	# strokes (the verification pass: a still eye per bay left the far row four
+	# metres from the hands, past what a handle can stretch).
+	rig.define(CameraRig.PLATE, "PlateView", Vector3(-0.8, 1.45, 1.95), Vector3(0.3, -0.8, -0.8))
+	# STRIPPING THE FORMS (5.3): from the road off the drive's left kerb corner,
+	# high enough to hold both long boards to the garage and the kerb board
+	# across the near end - all three rings in one still picture.
+	rig.define(CameraRig.STRIP, "Kerb", Vector3(-2.4, 2.2, 3.3), Vector3(0.5, -0.5, -3.4))
 	# The reward deserves its own picture. Without it the payoff was the eighth
 	# time the child had seen the WIDE frame, with the car 130 px wide against a
 	# white garage door: down at a child's height instead, on the car's wheels
@@ -1628,6 +2147,7 @@ func _press(at: Vector2, pressed: bool) -> bool:
 		if _accepted:
 			_woke()
 		_accepted = false
+		_carry_back = false
 		_woke_at = Vector2.INF
 		_touch_down = false
 		runner.hold(false)
@@ -1646,6 +2166,14 @@ func _press(at: Vector2, pressed: bool) -> bool:
 		var m := _machine_under(at)
 		if m != null:
 			_honk(m)
+			# A finger that lands on a truck coming down the street and STAYS
+			# there is already the banksman: when the truck stops, the finger
+			# still on it backs it in, with no second press (the plan's 1.8).
+			# By the same tap-on-target rule as a press on the waiting truck, not
+			# the honk's wider grow (the verification pass).
+			if s.kind == JobStep.Kind.BUTTON and m == _backed_by_next_row() and _on_truck(m, at):
+				_carry_back = true
+				return true
 		return false
 	# A BUTTON step is answered by the button, which is its own Control: a tap on
 	# the picture is not a wrong answer, it just is not the answer.
@@ -1675,10 +2203,22 @@ func _press(at: Vector2, pressed: bool) -> bool:
 		# is a press on that ring (the improvement plan's 0.5).
 		if _picked == 0 and on_wedge and _rings.count() > 0:
 			_picked = _rings.id_at(0)
+		# A form board is nine metres long and has one ring: a tap anywhere ON it
+		# is a tap on it (5.3) - the thing under the finger answers.
+		if _picked == 0 and s != null and s.verb == "form_strip":
+			_picked = _board_under(at, drive.open_strip_forms())
+		elif _picked == 0 and s != null and s.verb == "form_set":
+			# The same for a board waiting in the air to be set: nine metres of
+			# board with one ring in its middle (the verification pass).
+			_picked = _board_under(at, drive.open_forms_in(drive.current_form_group()))
 		if _picked == 0:
 			# A finger on the ring already being worked - a mash - is not a
 			# miss; it is simply not another bite.
 			if _rings.pick_nearest(camera, at, reach, true, world_reach, min_reach) != 0:
+				return false
+			# ...and nor is a finger along a board already coming off or going in.
+			if s != null and (s.verb == "form_strip" or s.verb == "form_set") \
+					and _board_under(at, _taken_boards(), true) != 0:
 				return false
 			_miss()
 			_rings.nudge_nearest(camera, at)
@@ -1726,9 +2266,12 @@ func _payoff_press(event: InputEvent) -> void:
 	if at == Vector2.INF or hud == null:
 		return
 	if car != null and car.visible and _box_under(car, at):
-		if _now_s() - _honk_at_s >= HONK_GAP and sfx != null:
+		# Not over itself: the ice-cream van's jingle is two and a half seconds,
+		# and a mashing finger started four at once (the verification pass).
+		if _now_s() - _honk_at_s >= maxf(HONK_GAP, _car_voice_len) and sfx != null:
 			_honk_at_s = _now_s()
-			sfx.play_group("voice_hatchback" if sfx.loaded_count("voice_hatchback") > 0 else "horn")
+			sfx.play_group(car_voice())
+			_car_voice_len = float(sfx.last_length)
 		return
 	if hud.next_visible() and not hud.next_rect().grow(_reach_px() * 0.5).has_point(at):
 		_miss()
@@ -1737,9 +2280,10 @@ func _payoff_press(event: InputEvent) -> void:
 
 ## Is a screen point on this node's box (its world box projected, grown by
 ## half a finger's reach)?
-func _box_under(node: Node3D, at: Vector2) -> bool:
+func _box_under(node: Node3D, at: Vector2, grow: float = -1.0) -> bool:
 	if camera == null or hud == null:
 		return false
+	var by := grow if grow >= 0.0 else _reach_px() * 0.5
 	var frame := get_viewport().get_visible_rect().size
 	var box := _world_box(node)
 	if box.size.length_squared() < 0.01:
@@ -1753,7 +2297,50 @@ func _box_under(node: Node3D, at: Vector2) -> bool:
 		var sp := Vector2(p.x, p.y)
 		rect = Rect2(sp, Vector2.ZERO) if first else rect.expand(sp)
 		first = false
-	return not first and rect.grow(_reach_px() * 0.5).has_point(at)
+	return not first and rect.grow(by).has_point(at)
+
+
+## The form board still to strip whose top edge runs nearest a screen point,
+## within a finger - or `tap_reach_m` of world at the board, if that is more -
+## or 0. Measured to the board's LINE, never its box: a long board's box seen
+## from the kerb covers half the slab.
+func _board_under(at: Vector2, boards: PackedInt32Array, include_taken: bool = false) -> int:
+	if drive == null or hud == null:
+		return 0
+	var frame := get_viewport().get_visible_rect().size
+	var best := 0
+	var best_d := INF
+	for i in boards:
+		# A board whose ring is already taken is being worked: a press on it is a
+		# mash, never a new pick - it used to overwrite a kept tap on another board.
+		if not include_taken and _rings != null and _rings.is_taken(i):
+			continue
+		var line := drive.form_line_world(i)
+		if line.size() < 2:
+			continue
+		var a := hud.project_into(frame, line[0])
+		var b := hud.project_into(frame, line[1])
+		if a.z <= 0.0 or b.z <= 0.0:
+			continue
+		var p := Geometry2D.get_closest_point_to_segment(at, Vector2(a.x, a.y), Vector2(b.x, b.y))
+		var depth := lerpf(a.z, b.z, clampf(Vector2(a.x, a.y).distance_to(p) / maxf(Vector2(a.x, a.y).distance_to(Vector2(b.x, b.y)), 1.0), 0.0, 1.0))
+		var reach := maxf(_finger_px(), minf(config.tap_reach_m * hud.pixels_per_metre(frame, depth), _reach_px()))
+		var d := p.distance_to(at)
+		if d <= reach and d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+## The boards whose rings are taken (being set or stripped right now).
+func _taken_boards() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	if _rings == null or drive == null:
+		return out
+	for i in range(1, drive.form_count() + 1):
+		if _rings.index_of(i) >= 0 and _rings.is_taken(i):
+			out.append(i)
+	return out
 
 
 ## An accepted press: the idle arrow's clock starts again from here.
@@ -1886,17 +2473,27 @@ func phase_done(step: JobStep) -> void:
 	# Flying the nozzle home dropped its hose in one frame, in a picture held
 	# still on the hands - on a 4:3 iPad a fifth of the screen of hose (4.3).
 	if t != null and TOOL_REST.has(step.tool) and not t.trail_visible():
-		t.hover(TOOL_REST[step.tool], Vector3.FORWARD, Vector3.UP)
+		if step.tool == "plate":
+			# Standing upright, the way every other tool goes back to the grass -
+			# never faded out in the held picture (the verification pass).
+			t.hover(TOOL_REST[step.tool], Vector3.DOWN, Vector3.BACK)
+		else:
+			t.hover(TOOL_REST[step.tool], Vector3.FORWARD, Vector3.UP)
 	await get_tree().create_timer(config.phase_hold, false).timeout
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+	# A PAUSE is the settings panel taking the screen (6.4). The tree it freezes
+	# never delivers the release of whatever finger was down, and this level
+	# keeps its own finger state - so a child holding the screed when a parent
+	# opens the panel would come back to a beat the level still thinks is held.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_PAUSED:
 		# The app went to the background with a finger down. That finger is
 		# gone as far as the toy can tell, so the beat lets go of it now rather
 		# than spraying on its own when the child comes back to it.
 		_fingers.clear()
 		_finger = -1
+		_carry_back = false
 		if _touch_down:
 			_touch_down = false
 			if runner != null and not runner.finished:
@@ -1939,11 +2536,18 @@ func tap_counts(at: Vector2) -> bool:
 	# middle of a nine-metre slab would refuse a perfectly sensible first touch at
 	# the far end.
 	var step := runner.current_step()
-	# A DRAG beat is aimed at its TOOL - the board, the sled: a press on it or
-	# within a finger of it picks it up; a press on the empty slab in front of
-	# it is a miss, answered at once rather than with two seconds of nothing
-	# (the improvement plan's 2.5).
-	if step != null and step.verb in ["screed_pull", "joint_cut"]:
+	# Backing a truck in: the press has to land on the truck (1.8). Anywhere
+	# else is a miss, answered with the pop and the arrow's nudge.
+	if step != null and SiteVerbs.BACK_VERBS.has(step.verb):
+		return on_backing_truck(at)
+	# A DRAG beat is aimed at its TOOL - the board, the sled, the plate: a press
+	# on it or within a finger of it picks it up; a press on the empty slab in
+	# front of it is a miss, answered at once rather than with two seconds of
+	# nothing (the improvement plan's 2.5).
+	# The plate by its own one rule, shared with its grab (`plate_under`).
+	if step != null and step.verb == "compact_base" and drag_tool_at != Vector3.INF:
+		return plate_under(at)
+	if step != null and step.verb in ["screed_pull", "joint_cut", "compact_base"]:
 		var fr := get_viewport().get_visible_rect().size
 		var tp := hud.project_into(fr, drag_hint(step.verb))
 		if tp.z <= 0.0:
@@ -2018,6 +2622,14 @@ func arm_rings(step: JobStep, done: int) -> void:
 	# jumped there on the press.
 	if step.verb == "screed_pull":
 		set_screed_view(Driveway.Z_APRON)
+	# The plate stands on its bay's base from the frame its step opens, and again
+	# after every beat at the point the beat walked it to - never on the lawn at
+	# its rest, and never popping (5.1).
+	if step.verb == "compact_base":
+		var pbay := clampi(done + 1, 1, drive.bay_count())
+		if done == 0 or _plate_at == Vector3.INF:
+			set_plate_view(plate_at(pbay))
+		hold_plate(tool_node("plate"), plate_at(pbay), pbay, false)
 	var points: Array[Vector3] = []
 	var ids := PackedInt32Array()
 	var size := 0.0
@@ -2038,6 +2650,13 @@ func arm_rings(step: JobStep, done: int) -> void:
 			# the strip (round 4).
 			# The ring rides ON the board waiting in the air, not on the grass
 			# under it (round 5: "the child is asked to tap the lawn").
+			# Every board the job can take now waits in the air over its place from
+			# the moment the row opens (it used to appear only on the first tap, with
+			# the rings floating over an empty trench). Only those: the kerb board is
+			# not on site until the base is packed (5.2).
+			for i in drive.live_open_forms():
+				if not drive.form_shown(i):
+					drive.set_form(i, 0.0)
 			for i in drive.open_forms_in(drive.current_form_group()):
 				points.append(drive.form_home(i) + Vector3(0.0, config.form_drop_height + 0.10, 0.0))
 				ids.append(i)
@@ -2049,8 +2668,10 @@ func arm_rings(step: JobStep, done: int) -> void:
 			# The pegs stand waiting from the moment the phase opens, the way the
 			# bars do: they used to appear only on the first blow, so the first
 			# pair's rings floated over bare earth (4.2). Never a driven one.
+			# Only pegs whose board is in: the kerb board's two wait for it (5.2),
+			# or they stood in the road's edge while the tipper backed over them.
 			for j in range(1, drive.stake_count() + 1):
-				if not drive.stake_is_in(j) and not drive.stake_shown(j):
+				if not drive.stake_is_in(j) and not drive.stake_shown(j) and drive.stake_live(j):
 					drive.set_stake(j, 0.0)
 			for i in drive.open_stakes_in(drive.current_stake_group()):
 				# ON the painted cap, which is what the sledge lands on (4.2).
@@ -2072,6 +2693,13 @@ func arm_rings(step: JobStep, done: int) -> void:
 				points.append(drive.bar_wait_point(i))
 				ids.append(i)
 			size = config.ring_bar
+		"form_strip":
+			# All three boards at once, in any order (5.3): the child strips what
+			# they set. Never the expansion strip, which stays in the slab.
+			for i in drive.open_strip_forms():
+				points.append(drive.strip_ring_point(i))
+				ids.append(i)
+			size = config.ring_form
 		_:
 			return
 	if want > 0:
@@ -2163,10 +2791,29 @@ func _drag_woke(at: Vector2) -> void:
 		_woke()
 
 
+## The machine the row after this one has the child back in, or null: a press
+## on it while it comes down the street is kept for the back-in (1.8).
+func _backed_by_next_row() -> Machine:
+	if job == null or runner == null:
+		return null
+	var i := runner.index + 1
+	if i < 0 or i >= job.steps.size():
+		return null
+	var nxt: JobStep = job.steps[i]
+	if nxt == null or not SiteVerbs.BACK_VERBS.has(nxt.verb):
+		return null
+	return machine(String(SiteVerbs.BACK_VERBS[nxt.verb]))
+
+
 ## The verb of the next BUTTON step from the current one, or "".
 func _next_call_verb() -> String:
 	if job == null or runner == null:
 		return ""
+	# While a truck is being backed in, the sleeping button still shows THAT
+	# truck: the next call is a whole phase away.
+	var here := runner.current_step()
+	if here != null and SiteVerbs.BACK_VERBS.has(here.verb) and runner.index > 0:
+		return job.steps[runner.index - 1].verb
 	for i in range(maxi(runner.index, 0), job.steps.size()):
 		var s: JobStep = job.steps[i]
 		if s != null and s.kind == JobStep.Kind.BUTTON:
@@ -2180,9 +2827,11 @@ func _next_call_verb() -> String:
 func drag_hint(verb: String) -> Vector3:
 	# A tool being dragged says where it is; the arrow stands on it and a press
 	# is measured against it wherever it has got to (the plan's 2.5).
-	if drag_tool_at != Vector3.INF and verb in ["screed_pull", "joint_cut"]:
+	if drag_tool_at != Vector3.INF and verb in ["screed_pull", "joint_cut", "compact_base"]:
 		return drag_tool_at
 	match verb:
+		"compact_base":
+			return plate_at(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
 		"screed_pull":
 			var z := _screed_view.position.z if _screed_view != null else Driveway.Z_APRON
 			return Vector3(Driveway.CENTRE_X, Driveway.GRADE, z + 0.35)
@@ -2202,6 +2851,16 @@ func _hint_swipe_axis() -> Vector2:
 	var s := runner.current_step() if runner != null else null
 	if s != null and (s.verb == "screed_pull" or s.verb == "broom_finish"):
 		return Vector2.DOWN
+	if s != null and s.verb == "compact_base" and hud != null and drive != null and drag_tool_at != Vector3.INF:
+		# From the plate toward the patch of its bay still loose.
+		var band := drive.bay_range(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
+		var fr := get_viewport().get_visible_rect().size
+		var a := hud.project_into(fr, drag_tool_at)
+		var b := hud.project_into(fr, drive.least_packed_in(band.x, band.y))
+		var d := Vector2(b.x - a.x, b.y - a.y)
+		if a.z > 0.0 and b.z > 0.0 and d.length() > 4.0:
+			return d.normalized()
+		return Vector2.UP
 	return Vector2.RIGHT
 
 
@@ -2227,6 +2886,55 @@ func hold_hose(t: HandTool, at: Vector3) -> void:
 	t.hover_instant(hold, (at + Vector3.UP * reach * 0.09 - hold).normalized(), Vector3.UP)
 	t.set_spray_reach(reach)
 	t.trail_to(hand_hold(config.hose_trail))
+
+
+## The plate compactor standing on the base at `at`, its handle running to the
+## child's hands off the bottom of the PLATE picture (the plan's 5.1). One helper
+## for the beat, the step's entry and the posed picture, like `hold_hose`. The
+## hands are taken off the bay's own PLATE pose, not the live camera: the live
+## one is still easing in when the step opens, and the rattle rolls it, and a
+## handle aimed at either would swing.
+func hold_plate(t: HandTool, at: Vector3, bay: int, working: bool) -> void:
+	if drive == null or at == Vector3.INF:
+		return
+	_plate_at = Vector3(at.x, Driveway.BASE_TOP, at.z)
+	drag_tool_at = _plate_at
+	if t == null:
+		return
+	# It rides the loose stone and settles as the patch under it packs.
+	var sole := Driveway.BASE_TOP + Driveway.STONE_FLAT_PROUD \
+		+ PLATE_RIDE * (1.0 - clampf(drive.packed_at(_plate_at), 0.0, 1.0))
+	var head := Vector3(at.x, sole, at.z)
+	# The hands stand where the PLATE eye stands - its eye point walks after the
+	# plate between strokes (`ease_plate_view`) - so the handle keeps about the
+	# same length wherever the plate goes (the verification pass: aimed at one bay's
+	# fixed hands it stretched past its limit at the bay's far row).
+	var hands := plate_hands()
+	t.hover_instant(head, Vector3.DOWN, (hands - head).normalized())
+	t.aim_handle_at(hands)
+	if working:
+		t.set_bit(-config.plate_stroke * (0.5 + 0.5 * sin(TAU * config.plate_hz * _now_s())))
+	else:
+		t.set_bit(0.0)
+
+
+## The child's hands on the plate's handle: `plate_hold` in the frame of the
+## PLATE pose at `PlateView` (never the live, rattling camera).
+func plate_hands() -> Vector3:
+	var tr := rig.pose_for(CameraRig.PLATE, _plate_view)
+	var o := config.plate_hold
+	return tr.origin + tr.basis.x * o.x + tr.basis.y * o.y - tr.basis.z * o.z
+
+
+## Where the plate stands for bay `b`: where the last beat left it if that is in
+## this bay, else the bay's start.
+func plate_at(b: int) -> Vector3:
+	if drive == null:
+		return Vector3.INF
+	var band := drive.bay_range(b)
+	if _plate_at != Vector3.INF and _plate_at.z >= band.x and _plate_at.z <= band.y:
+		return _plate_at
+	return drive.plate_start(b)
 
 
 func work_point(plane_y: float = 0.0) -> Vector3:
@@ -2320,6 +3028,18 @@ func _process(delta: float) -> void:
 	var s := runner.current_step()
 	if s == null or s.kind != JobStep.Kind.HOLD:
 		return
+	if SiteVerbs.BACK_VERBS.has(s.verb):
+		# The finger that was on the truck as it came down the street backs it
+		# in the moment it stops (the plan's 1.8) - if it is still down.
+		if _carry_back and _touch_down and not runner.held and not runner.is_busy():
+			_carry_back = false
+			_accept(_touch_at if _touch_at != Vector2.INF else Vector2.ZERO)
+			runner.hold(true)
+		# The ring stands on the truck, which moves: the HUD re-applies the point
+		# it was last given, so it is given the truck's every frame until it is.
+		if not runner.held and hud != null and hud.aiming_at_world() and not runner.arrow_muted():
+			runner.update_arrow()
+		return
 	# A beat worked by dragging: a real stick or the arrow keys drive a cursor over
 	# the slab, because a keyboard has no finger. A touch screen never comes
 	# through here - `work_point` reads the finger straight off the screen.
@@ -2327,6 +3047,9 @@ func _process(delta: float) -> void:
 		var stick := Pad.move()
 		if stick.length() > 0.3:
 			_woke()
+			# A stick ends the opening look as a finger does (`Pad.go_event`),
+			# or the drag ran on the wide until the eye swooped in mid-stroke.
+			_end_opening()
 			if _cursor == Vector3.INF:
 				match s.verb:
 					"broom_finish":
@@ -2340,6 +3063,10 @@ func _process(delta: float) -> void:
 					"joint_cut":
 						_cursor = Vector3(Driveway.CENTRE_X - Driveway.WIDTH * 0.5 + 0.25, Driveway.GRADE,
 							drive.joint_z(clampi(runner.done_in_step + 1, 1, drive.joint_count())))
+					"compact_base":
+						# ON the plate, or a stick could never pick it up.
+						_cursor = drag_tool_at if drag_tool_at != Vector3.INF \
+							else drive.plate_start(clampi(runner.done_in_step + 1, 1, drive.bay_count()))
 					_:
 						_cursor = drive.driest_world()
 				_cursor_from_stick = true
@@ -2347,6 +3074,13 @@ func _process(delta: float) -> void:
 			_cursor.x = clampf(_cursor.x, Driveway.CENTRE_X - Driveway.WIDTH * 0.5,
 				Driveway.CENTRE_X + Driveway.WIDTH * 0.5)
 			_cursor.z = clampf(_cursor.z, Driveway.Z_APRON, Driveway.Z_KERB)
+			if s.verb == "compact_base" and drag_tool_at != Vector3.INF:
+				# Kept a hand's width from the plate and inside its bay: a stick
+				# cursor that ran ahead at 2.6 m/s lost the plate's grab, and one
+				# left in the last bay never picked the plate up in the next.
+				var off := Vector3(_cursor.x - drag_tool_at.x, 0.0, _cursor.z - drag_tool_at.z).limit_length(0.4)
+				_cursor = drive.clamp_plate(Vector3(drag_tool_at.x + off.x, 0.0, drag_tool_at.z + off.z),
+					clampi(runner.done_in_step + 1, 1, drive.bay_count()))
 			runner.hold(true)
 		elif _cursor_from_stick:
 			# The stick let go: hand the beat back to the finger and stop working.
@@ -2535,6 +3269,13 @@ func _build_effects() -> void:
 	rview.position = Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON)
 	add_child(rview)
 	_rake_view = rview
+	# The plate compactor's eye point (5.1): it walks after the plate between
+	# strokes, never under a dragging finger.
+	var pview := Marker3D.new()
+	pview.name = "PlateView"
+	pview.position = Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON)
+	add_child(pview)
+	_plate_view = pview
 
 
 func _puff(puff_name: String, color: Color, size: float, amount: int, life: float,
@@ -2742,6 +3483,60 @@ func set_screed_view(z: float) -> void:
 		_screed_view.position.z = clampf(z, Driveway.Z_APRON, Driveway.Z_KERB)
 
 
+## The plate's camera point, on the plate (x and z; its eye stands behind it).
+func set_plate_view(at: Vector3) -> void:
+	if _plate_view != null and at != Vector3.INF:
+		_plate_view.position = Vector3(at.x, Driveway.GRADE, at.z)
+
+
+## Eases the plate's camera point after the plate - only between strokes (or
+## under a world cursor), like the screed's.
+func ease_plate_view(at: Vector3, dt: float, rate: float = 2.5) -> void:
+	if _plate_view == null or at == Vector3.INF:
+		return
+	var want := Vector3(at.x, Driveway.GRADE, at.z)
+	_plate_view.position = _plate_view.position.lerp(want, clampf(dt * rate, 0.0, 1.0))
+
+
+func plate_view() -> Node3D:
+	return _plate_view
+
+
+## Is a screen point on the plate compactor: on its drawn machine (the head's
+## box on the screen, grown by a finger), or dropped onto the base within reach
+## of the plate (its half-size plus `tap_reach_m`)? ONE rule for the press and
+## the grab, so an accepted press always picks it up and a refused one is a heard
+## miss (the session-5 verification pass: a press on the orange cowl lands a
+## metre behind the plate on the base, and was accepted and then never grabbed).
+func plate_under(at: Vector2) -> bool:
+	if drag_tool_at == Vector3.INF or camera == null or hud == null or at == Vector2.INF:
+		return false
+	var on := _screen_to_plane(at, Driveway.BASE_TOP)
+	if on != Vector3.INF and Vector2(on.x - drag_tool_at.x, on.z - drag_tool_at.z).length() \
+			<= Driveway.PLATE_HALF.y + config.tap_reach_m:
+		return true
+	var t := tool_node("plate")
+	var head := t.find_child("Head", true, false) as MeshInstance3D if t != null else null
+	if head == null or not head.is_visible_in_tree():
+		return false
+	var frame := get_viewport().get_visible_rect().size
+	var box := head.global_transform * head.get_aabb()
+	var rect := Rect2()
+	var first := true
+	for c in range(8):
+		var p := hud.project_into(frame, box.get_endpoint(c))
+		if p.z <= 0.0:
+			return false
+		rect = Rect2(Vector2(p.x, p.y), Vector2.ZERO) if first else rect.expand(Vector2(p.x, p.y))
+		first = false
+	return rect.grow(_finger_px()).has_point(at)
+
+
+## Where the finger is on the screen right now (INF when none is down).
+func touch_point() -> Vector2:
+	return _touch_at if _touch_down else Vector2.INF
+
+
 ## Eases the screed's camera point toward the board's line - called only
 ## between strokes, so the ground never moves under a dragging finger.
 func ease_screed_view(z: float, dt: float, rate: float = 2.5) -> void:
@@ -2895,9 +3690,12 @@ func shot_anchor_override(step: JobStep) -> Node3D:
 		return drive.panel_marker(drive.current_panel())
 	if step.verb == "stake_drive":
 		# The pair being driven now. Same rule, one place smaller. After the last
-		# one the group is -1 for a frame: stay on the last pair rather than
-		# falling back to WIDE.
+		# one the group is -1 for a frame: stay on the pair just driven rather
+		# than falling back to WIDE - the pair JUST DRIVEN, not the last by
+		# number, which after the first row is the kerb pair 9 m away (5.2).
 		var g := drive.current_stake_group()
+		if g < 0:
+			g = drive.last_stake_group()
 		if g < 0:
 			g = drive.stake_group_count() - 1
 		return drive.stake_group_mark(g)
@@ -2906,12 +3704,17 @@ func shot_anchor_override(step: JobStep) -> Node3D:
 	if step.verb == "form_set":
 		var fg := drive.current_form_group()
 		if fg < 0:
+			fg = drive.last_form_group()
+		if fg < 0:
 			fg = drive.form_group_count() - 1
 		return drive.form_group_mark(fg)
 	return null
 
 
 func named_target(want: String) -> Node3D:
+	# The truck being backed in (1.8): the machine itself, not its working end.
+	if want.begins_with("Back:"):
+		return machine(want.substr(5))
 	if want.begins_with("Machine:"):
 		var kind := want.substr(8)
 		var m := machine(kind)
@@ -2929,37 +3732,42 @@ func named_target(want: String) -> Node3D:
 
 # --- The payoff ------------------------------------------------------------------------------
 
-## The driveway is finished. The forms come off, the afternoon turns to evening
-## while the slab cures - you do not drive on green concrete - and then the
-## homeowner's car pulls in and parks on it.
+## The driveway is finished: the child has taken the last board off. The tada
+## and the YAY! answer that last tap, the bar is seen full on the wide the job
+## opened on, and then the homeowner's car pulls in and parks on it.
+##
+## The cure and the strip are not here any more. Since the plan's fifth session
+## the cure is a beat of the job (`SiteVerbs.slab_cure`: the cones across the
+## mouth, the light to evening, the song down) and the boards are the child's to
+## strip after it (`form_strip`, 5.3): what the child put in, the child takes
+## out, and the celebration follows the child's last work, not the broom's.
 func _celebrate() -> void:
 	if _celebrating:
 		return
 	_celebrating = true
+	# The job is done: nothing left to come back to (6.2). A tablet put down
+	# during the payoff opens on a new driveway.
+	if _saves:
+		SaveGame.clear()
 	job_done.emit()
 	if hud != null:
 		hud.hide_buttons()
 		hud.show_pads([])
 		# The bar is seen FULL - it reached its end under the finger, stepped
-		# back - through the tada and the cones, before it goes for the cure.
+		# back - through the tada and the look at the finished drive.
 		hud.set_chrome_target(1.0)
 		hud.flash("YAY!", config.celebrate_time * 0.5)
 	if sfx != null:
 		sfx.play_group("tada")
 	rig.go(CameraRig.WIDE, null)
-	# The cure is a SHAPE, not a light (the plan's 3.4): the cones go across the
-	# mouth of the drive first - a crew's "keep off", which every child knows -
-	# and stand there through the light sweep.
-	await _cones_to_mouth(0.8)
-	# Later that day: the light sweeps to evening, the song goes quiet and the
-	# HUD steps out of the picture (3.3) - and only THEN do the boards come off.
-	# Boards do not come off a slab that was broomed a second ago.
-	if sfx != null:
-		sfx.fade_music(-30.0, config.cure_time)
+	# A look back at the whole thing: the new drive, the boards on the grass
+	# beside it, the cones still across its mouth.
+	await get_tree().create_timer(config.payoff_look, false).timeout
+	# Then the HUD steps out of the picture (3.3) - its own 0.2 s ease - before
+	# the cut.
 	if hud != null:
 		hud.set_chrome_target(0.0, true)
-	await _tween_over(config.cure_time, func(k: float) -> void: _cure(k))
-	await _tween_over(config.strip_time, func(k: float) -> void: drive.strip_forms(k))
+	await get_tree().create_timer(0.25, false).timeout
 	# The crew's kit goes at the CUT to the street, never in front of the child
 	# (3.4). The car's arrival is watched from the STREET eye; the pulled-back
 	# PAYOFF picture comes as it turns in (`_park_car`), with the cones lifted
@@ -2974,6 +3782,19 @@ func _celebrate() -> void:
 		# with NEXT up it could only mean the same thing twice.
 		hud.show_next()
 	ready_for_next.emit()
+
+
+## LATER THAT DAY, as a beat of the job (`SiteVerbs.slab_cure`, before the child
+## strips the forms). The cure is a SHAPE, not a light (the plan's 3.4): the
+## cones go across the mouth of the drive first - a crew's "keep off", which
+## every child knows - and stand there through the light sweep and the strip;
+## the song goes quiet with the light. The HUD stays: the strip's three stops
+## are still to come, and a bar locked out now would fill them unseen.
+func cure_slab(seconds: float) -> void:
+	await _cones_to_mouth(0.8)
+	if sfx != null:
+		sfx.fade_music(-30.0, seconds)
+	await _tween_over(seconds, func(k: float) -> void: _cure(k))
 
 
 ## The light sweeps round and down, and the slab dries pale: a few seconds that
@@ -3031,7 +3852,8 @@ func _car() -> Machine:
 	car = Machine.new()
 	car.name = "Car"
 	car.kind = "Car"
-	car.model_path = VEHICLE_MODELS + "Hatchback.glb"
+	# The visit's car (6.1), in its own paint.
+	car.model_path = VEHICLE_MODELS + String(look.get("car", "Hatchback")) + ".glb"
 	add_child(car)
 	car.setup(config)
 	car.ground = _ground_y
@@ -3039,17 +3861,55 @@ func _car() -> Machine:
 	# On the middle of its own wheels: the model's origin was off its centre
 	# and the car parked with a rear corner over the grass (round 6).
 	car.centre_model_x()
+	var paint: Color = look.get("paint", Color(0, 0, 0, 0))
+	if paint.a > 0.0:
+		_paint_named(car, "Equip_Paint", paint)
 	return car
+
+
+## The homeowner's car's voice (6.1): its own, or the plain horn when that clip
+## is not on disk.
+func car_voice() -> String:
+	var v := String(look.get("voice", "voice_hatchback"))
+	return v if sfx != null and sfx.loaded_count(v) > 0 else "horn"
+
+
+## Recolours every surface under `root` whose material's name starts with
+## `prefix`, on a COPY put in the surface's override (Car Garage's
+## `Vehicle.paint`). An imported material is shared by every instance of its
+## scene and cached across NEXT: painted in place, the next visit's car or house
+## would arrive in this one's colour. By prefix, because Godot renames a
+## duplicate "Equip_Paint2". Returns how many surfaces it painted.
+func _paint_named(root: Node3D, prefix: String, c: Color) -> int:
+	var painted := 0
+	var meshes: Array[Node] = root.find_children("*", "MeshInstance3D", true, false)
+	if root is MeshInstance3D:
+		meshes.append(root)
+	for n in meshes:
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		for s in range(mi.mesh.get_surface_count()):
+			var live := mi.get_active_material(s) as BaseMaterial3D
+			if live == null or not String(live.resource_name).begins_with(prefix):
+				continue
+			var dup := live.duplicate() as BaseMaterial3D
+			dup.resource_name = live.resource_name
+			dup.albedo_color = c
+			mi.set_surface_override_material(s, dup)
+			painted += 1
+	return painted
 
 
 ## Puts the homeowner's car where it ends up, with no drive-in: the posed
 ## payoff, and the thing `_park_car` drives to. Parked with `Machine.place`, the
 ## same call that ends the drive-in, so the posed picture and the played one are
-## the same picture.
+## the same picture. By its NOSE (6.1): the pickup is 1.4 m longer than the
+## hatchback and parked at the hatchback's spot it stood in the garage door.
 func _place_car_on_drive() -> void:
 	var c := _car()
 	c.visible = true
-	c.place(drive.park_spot(), 180.0)
+	c.place(drive.park_spot(c.nose_m()), 180.0)
 
 
 ## The homeowner's car comes up the street and turns onto the new drive.
@@ -3067,7 +3927,7 @@ func _place_car_on_drive() -> void:
 func _park_car() -> void:
 	var c := _car()
 	c.visible = true
-	var spot := drive.park_spot()
+	var spot := drive.park_spot(c.nose_m())
 	# Far enough up the street to be off the picture when it starts, and to have
 	# room to straighten before the turn.
 	# Facing the way it drives (STREET_YAW), so it does not spin on the spot.
@@ -3089,13 +3949,16 @@ func _park_car() -> void:
 		# Garage's way: a toot `horn_delay` after it stops and another
 		# `horn_gap` later. It parked to the pour's chime before; a child
 		# remembers the beep, and it is the same car the garage taught them.
-		var voice := "voice_hatchback" if sfx.loaded_count("voice_hatchback") > 0 else "horn"
+		var voice := car_voice()
 		for n in range(maxi(config.horn_toots, 1)):
 			# The second toot waits for the first to SOUND OUT: at `horn_gap`
 			# 0.45 s a 1.5 s voice clip was started twice inside itself.
 			var gap := config.horn_delay if n == 0 else maxf(config.horn_gap, float(sfx.last_length))
 			await get_tree().create_timer(gap, false).timeout
 			sfx.play_group(voice)
+			# A tap on the car while it toots waits for the toot, too.
+			_honk_at_s = _now_s()
+			_car_voice_len = float(sfx.last_length)
 		# NEXT comes up after the last toot has SOUNDED, not after it has
 		# started: the voice clips run a second and a half.
 		await get_tree().create_timer(maxf(0.3, float(sfx.last_length)), false).timeout
@@ -3118,7 +3981,7 @@ func _cone_posts() -> Array[Node3D]:
 ## the wet concrete it is guarding says the opposite of the lesson, and the
 ## footway the cones came from is 9.5 cm proud of the crossing.
 func _cone_mouth(i: int) -> Vector3:
-	return Vector3(Driveway.CENTRE_X + (-1.1 if i == 0 else 1.1), 0.0, Driveway.Z_KERB + 0.30)
+	return Vector3(Driveway.CENTRE_X + (-1.1 if i == 0 else 1.1), 0.0, Driveway.Z_KERB + CONE_MOUTH_OUT)
 
 
 ## Slides the cones to the mouth of the drive at the kerb, one each side of its
@@ -3176,6 +4039,8 @@ func _clear_kit(posed: bool = false) -> void:
 			t.visible = false
 	if drive != null:
 		drive.hide_rubble(1.0)
+		# And the boards the child stripped, off the grass with their pegs (5.3).
+		drive.carry_off_forms()
 	if sfx != null and not posed:
 		sfx.play_group("clunk")
 
@@ -3203,24 +4068,281 @@ func _tween_over(seconds: float, on_k: Callable) -> void:
 	on_k.call(1.0)
 
 
+## NEXT: back to the title row, where the next visit is chosen (6.3). The save
+## is gone (the job it held is finished) and the finished visit's seed is left
+## behind for the title's backdrop.
 func _on_next() -> void:
 	if hud != null:
 		hud.clear_flash()
-	get_tree().reload_current_scene()
+	if _saves:
+		SaveGame.clear()
+	# The finished visit is left for the title's backdrop, so the drive the
+	# child just built - with the car on it - is what stands behind the next
+	# choice (6.3). The NEXT VISIT is drawn at the seat's press, not here: a
+	# seed drawn now would be one the title had already used for its picture.
+	Engine.set_meta(LAST_SEED_META, play_seed)
+	if sfx != null:
+		sfx.stop_all()
+	if leave_scene.is_valid():
+		leave_scene.call()
+	elif get_tree().current_scene == self and ResourceLoader.exists(TITLE_SCENE):
+		get_tree().change_scene_to_file(TITLE_SCENE)
+	else:
+		next_requested.emit()
 
 
 func _on_home() -> void:
-	# There is no title screen in the prototype, so the house can only start the
-	# job again - and that is the one thing it must NOT do while a job is
+	# The house goes to the title row now (6.3) - but never while a job is
 	# running: one tap on the biggest green thing on the screen threw sixty
 	# stops of a child's work away (the improvement plan's 0.1, 2026-09-15). The
-	# button is off the screen until the payoff (`SiteHud.hide_home`); this
-	# guard is for the signal, so nothing reaches the reload from a running job
-	# by any route. When the title screen is ported the house goes there, as a
-	# press-and-hold, with the job saved.
+	# button is still off the screen until the payoff (`SiteHud.hide_home`);
+	# this guard is for the signal, so nothing reaches the cut from a running
+	# job by any route. 0.1 will give it a press-and-hold - the widget the
+	# title's own "new drive" disc already is - and the job is saved by then.
 	if runner != null and not runner.finished:
 		return
 	_on_next()
+
+
+# --- The save: the job survives the app closing (6.2) ------------------------------------------
+
+## Does this run read and write the save? The child's game does. A harness
+## (anything that set `shot_args`) does only if it pointed the save at a
+## scratch file, and a POSED run never does: a picture must not resume a job,
+## and must not write one.
+func saves_on(args: Dictionary) -> bool:
+	# A backdrop is nobody's game: it must not resume the child's job into the
+	# picture behind a menu, and must never write over it.
+	if dress_only:
+		return false
+	if not SaveGame.enabled or args.has("stage"):
+		return false
+	return SaveGame.path_override != "" or not Engine.has_meta("shot_args")
+
+
+## Which of step `i`'s verb's rows it is (the second `form_set` is 2): the save
+## names a row by verb and this, never by number (session 5's rule).
+func row_nth(i: int) -> int:
+	var n := 0
+	for k in range(mini(i, job.steps.size() - 1) + 1):
+		if job.steps[k].verb == job.steps[i].verb:
+			n += 1
+	return n
+
+
+## The stage a resumed step stands on: of the stages, the last one posed at or
+## before it (`STAGE_STEP`). Rebar's mixer call and its back-in stand on
+## `rebar`, the tip on `staked`; the strip on `cured`.
+func stage_for_step(i: int) -> String:
+	var best := "old"
+	var best_at := -1
+	for st: String in Driveway.STAGE_ORDER:
+		if st == "done" or st == "parked" or not STAGE_STEP.has(st):
+			continue
+		var at := stage_step(st)
+		if at <= i and at > best_at:
+			best = st
+			best_at = at
+	return best
+
+
+## Which places of step `i`'s row are done, read off the world, as the save
+## keeps them: the hammer's spots, the boards, the pegs, the bars and the
+## stripped boards, for the rows a child takes in ANY order - a count cannot
+## say the child laid bars 3 and 1. Ordered group by group, so posing them back
+## in this order is always a legal pick (`_apply_places`). [] for every other row.
+func done_places(i: int) -> Array:
+	var out: Array = []
+	if job == null or drive == null or i < 0 or i >= job.steps.size():
+		return out
+	var kerb_row := row_nth(i) > 1
+	var keyed: Array = []
+	match job.steps[i].verb:
+		"jack_spot":
+			for n in range(1, drive.jack_spots() + 1):
+				if drive.spot_done(n):
+					keyed.append([n, n])
+		"form_set":
+			for b in range(1, drive.form_count() + 1):
+				if drive.form_is_in(b) and (b == Driveway.KERB_BOARD) == kerb_row:
+					keyed.append([drive.form_group(b) * 100 + b, b])
+		"stake_drive":
+			for n in range(1, drive.stake_count() + 1):
+				if drive.stake_is_in(n) and (drive.stake_board(n) == Driveway.KERB_BOARD) == kerb_row:
+					keyed.append([drive.stake_group(n) * 100 + n, n])
+		"rebar_lay":
+			for n in range(1, drive.bar_count() + 1):
+				if drive.bar_is_in(n):
+					keyed.append([drive.bar_group(n) * 100 + n, n])
+		"form_strip":
+			for b in drive.strip_boards():
+				if drive.form_is_stripped(b):
+					keyed.append([b, b])
+	keyed.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+	for k in keyed:
+		out.append(int(k[1]))
+	return out
+
+
+## The document the save holds for where the child is now. Nothing about when.
+func save_doc() -> Dictionary:
+	var i := runner.index
+	return {"job": _job_file, "rows": job.steps.size(), "verb": job.steps[i].verb, "nth": row_nth(i),
+		"done": runner.done_in_step, "places": done_places(i), "seed": play_seed}
+
+
+## Writes where the child is (on every step entered and every beat landed,
+## `JobRunner.place_changed`). Never once the job is over.
+func _write_progress() -> bool:
+	if not _saves or runner == null or job == null or drive == null or runner.finished or _celebrating:
+		return false
+	if runner.index < 0 or runner.index >= job.steps.size():
+		return false
+	return SaveGame.save_data(save_doc())
+
+
+## Where a saved document resumes, or {} for a fresh driveway: `{step, done,
+## places, seed}`. Refused whole when it is not this job, not this many rows
+## (an update added a beat), names no row, or carries no seed. A row whose work
+## was all done, or a row that plays by itself (a machine leaving, the cure),
+## resumes at the next row the child works - the leave has already happened as
+## far as the child is concerned. Past the last row there is nothing to resume.
+## `places` that do not match `done` are dropped for the canonical order.
+func resume_point(doc: Dictionary) -> Dictionary:
+	if doc.is_empty() or job == null:
+		return {}
+	if String(doc.get("job", "")) != _job_file:
+		return {}
+	if not _whole(doc.get("rows")) or int(doc["rows"]) != job.steps.size():
+		return {}
+	if not _whole(doc.get("nth")) or not _whole(doc.get("done")):
+		return {}
+	var seed := SiteLook.parse_seed(doc["seed"]) if _whole(doc.get("seed")) else -1
+	if seed < 0:
+		return {}
+	var i := job.index_of(String(doc.get("verb", "")), maxi(int(doc["nth"]), 1))
+	if i < 0:
+		return {}
+	var done := clampi(int(doc["done"]), 0, job.steps[i].count)
+	var places: Array = []
+	var raw: Variant = doc.get("places", [])
+	if raw is Array:
+		for v in raw:
+			if not _whole(v):
+				places = []
+				break
+			places.append(int(v))
+	while i < job.steps.size() and (done >= job.steps[i].count or job.steps[i].kind == JobStep.Kind.AUTO):
+		i += 1
+		done = 0
+		places = []
+	if i >= job.steps.size():
+		return {}
+	if places.size() != done:
+		places = []
+	return {"step": i, "done": done, "places": places, "seed": seed}
+
+
+## A JSON number that is a whole number (the parser hands every number back as
+## a float).
+func _whole(v: Variant) -> bool:
+	return (v is int or v is float) and float(v) == floor(float(v))
+
+
+## Opens a saved job where it was left (6.2): the world posed as play leaves it
+## when that row opens (`pose` with `play`), the places the child had done, and
+## what play has running there that a pose does not start. It opens on the WIDE,
+## as a fresh job does - the child sees their own site first - except where a
+## wide is wrong: the pour and the come-along (the truck is undrawn: a chute
+## hanging in the road), the drags (a press during the swoop moves the work
+## under a still finger) and the back-ins (the truck waits off the wide's
+## picture), which open on their own shots. A HOLD resumes at its own start: a
+## half-poured band, a half-packed bay or a half-backed truck starts that beat
+## again.
+func resume(point: Dictionary) -> void:
+	var i := int(point["step"])
+	var done := int(point["done"])
+	var s := job.steps[i]
+	pose(stage_for_step(i), i, done, point.get("places", []) as Array, true)
+	match s.verb:
+		"back_dump", "back_mixer":
+			# Waiting in the road with its engine ticking over, as the street leg
+			# leaves it.
+			if sfx != null:
+				sfx.play_loop(SiteVerbs.SOUND_IDLE, "arrive")
+		"form_strip":
+			# The song is down for the evening, where the cure left it.
+			if sfx != null:
+				sfx.fade_music(-30.0, 0.05)
+	# Mid-row, the hammer or the sledge stands wound up over the next place, as the
+	# verb's own pose has it: left on the lawn, the next blow jumped it a metre
+	# and a half in a frame (the session-6 verification pass).
+	if done > 0 and (s.verb == "jack_spot" or s.verb == "stake_drive"):
+		_pose_tool(s)
+	# The pour, the come-along, every drag and the back-ins open on their OWN
+	# shot. A finger pressed during the opening's swoop would be read through a
+	# moving camera - a drag beat moves its work under a still finger - and a
+	# truck waiting in the road is off the WIDE's picture.
+	if s.verb == "pour_chute" or SiteVerbs.SCRUB_VERBS.has(s.verb) or SiteVerbs.BACK_VERBS.has(s.verb):
+		runner.go_shot(s.shot, false)
+	else:
+		rig.snap(CameraRig.WIDE, null)
+		_opening = true
+		_opening_left = config.opening_hold
+	print("RESUME step %d %s done %d places %s seed %d" % [i, s.verb, done, str(point.get("places", [])), play_seed])
+	_write_progress()
+
+
+## Lays `done` places of a row that takes them in any order: each one named in
+## `want` while it is a legal pick now (on the panel being broken, in the group
+## being set), and the first open place for the rest. A save that names places
+## no child could have reached still resumes, on the canonical ones. Returns how
+## many it laid.
+func _apply_places(verb: String, want: Array, done: int) -> int:
+	var left: Array = want.duplicate()
+	var laid := 0
+	while laid < done:
+		var open := _open_picks(verb)
+		if open.is_empty():
+			break
+		var pick := open[0]
+		for w in left:
+			if open.has(int(w)):
+				pick = int(w)
+				left.erase(w)
+				break
+		match verb:
+			"jack_spot":
+				drive.jack_spot(pick, 1.0)
+				if drive.panel_ready(drive.spot_panel(pick)):
+					drive.break_panel(drive.spot_panel(pick), false)
+			"form_set":
+				drive.set_form(pick, 1.0)
+			"stake_drive":
+				drive.set_stake(pick, 1.0)
+			"rebar_lay":
+				drive.show_chairs(true)
+				drive.set_bar(pick, 1.0)
+			"form_strip":
+				drive.strip_form(pick, 1.0)
+		laid += 1
+	return laid
+
+
+## The places a child may pick next on a row, by the world's state.
+func _open_picks(verb: String) -> PackedInt32Array:
+	match verb:
+		"jack_spot":
+			return drive.open_spots(drive.current_panel())
+		"form_set":
+			return drive.open_forms_in(drive.current_form_group())
+		"stake_drive":
+			return drive.open_stakes_in(drive.current_stake_group())
+		"rebar_lay":
+			return drive.open_bars_in(drive.current_bar_group())
+		"form_strip":
+			return drive.open_strip_forms()
+	return PackedInt32Array()
 
 
 # --- Plumbing -------------------------------------------------------------------------------

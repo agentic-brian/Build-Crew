@@ -34,14 +34,18 @@ func corner() -> String:
 	return "FL"
 
 
-## Which step plays `verb`, or -1 when none does. The screenshot poses steer by
-## this rather than by a number, so a job that gains a beat in the middle - as
-## this one did when the torque pass was added - does not silently pose every
-## shot one step early.
-func index_of(verb: String) -> int:
+## Which step plays `verb` - the `nth` one that does, counting from 1 - or -1
+## when none does. The screenshot poses steer by this rather than by a number,
+## so a job that gains a beat in the middle does not silently pose every shot
+## one step early. `nth` because a verb may come back later in a job: the kerb
+## board is a second `form_set` after the base (Build Crew's plan, 5.2).
+func index_of(verb: String, nth: int = 1) -> int:
+	var seen := 0
 	for i in range(steps.size()):
 		if steps[i].verb == verb:
-			return i
+			seen += 1
+			if seen >= nth:
+				return i
 	return -1
 
 

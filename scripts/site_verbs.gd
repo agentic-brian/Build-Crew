@@ -43,6 +43,13 @@ const SCRUB_VERBS := {
 	"broom_finish": true,
 	"screed_pull": true,
 	"joint_cut": true,
+	"compact_base": true,
+}
+## The beats where the child BACKS A TRUCK IN (the improvement plan's 1.8, the
+## user's decision 4), and which machine: a press has to land on that truck.
+const BACK_VERBS := {
+	"back_dump": "DumpTruck",
+	"back_mixer": "ConcreteTruck",
 }
 ## The site's own noises (the user, 2026-09-12: "Correct all the sounds").
 ##
@@ -77,6 +84,12 @@ const SOUND_BAR := "rebardrop"
 ## `pop` (that is a miss) and not `clip` (the groover's end).
 const SOUND_TIE := "click"
 const SOUND_RAKE := "rakepull"
+## The plate compactor's rattle (5.1, ElevenLabs flow "Build Crew site sounds 4").
+const SOUND_PLATE := "platerattle"
+const SOUND_BEEPER := "reversebeep"
+## How far (on the ground) the plate may get from the child's hands within one
+## stroke: its handle stretches 3.2 times its 0.96 m, and a little is kept back.
+const PLATE_REACH := 2.8
 
 
 ## Is there a handler for this verb?
@@ -105,7 +118,8 @@ func run(verb: String, runner: JobRunner, subject: Node3D, targets: Array[Node3D
 ## at nothing. `loop_group` is a looped sound that plays only while it flows,
 ## and the bar fills through `runner.partial` as it goes.
 func _hold(runner: JobRunner, seconds: float, config: SiteConfig, loop_group: String,
-		on_k: Callable, voice: String = "work", engine_voice: String = "") -> void:
+		on_k: Callable, voice: String = "work", engine_voice: String = "", ramp: float = 0.0,
+		burst_from_press: bool = false) -> void:
 	var site: Variant = runner.level
 	var k := 0.0
 	var burst_left: float = config.hold_burst
@@ -116,24 +130,36 @@ func _hold(runner: JobRunner, seconds: float, config: SiteConfig, loop_group: St
 	# when the finger lifts (the improvement plan's 1.7). A hand tool never
 	# revs a machine, so most beats pass nothing.
 	var lean := 0.0
+	# `ramp` is how many seconds the work takes to come up to speed and to come
+	# to rest, for a thing with weight: a truck backing in under a finger gathers
+	# way and stops instead of lurching (1.8). 0 - every other beat - is the old
+	# switch, bit for bit.
+	var rate := 0.0
 	while k < 1.0:
 		var dt := runner.get_process_delta_time()
 		if runner.held and not was_held:
 			burst_left = config.hold_burst
 		was_held = runner.held
 		var flowing := runner.held or burst_left > 0.0
-		if not runner.held:
+		# `burst_from_press`: the burst is counted from the PRESS, so a tap still
+		# buys its seconds but a real hold stops on the lift (with only `ramp`'s
+		# coast) - a truck let go of must not roll on two metres at full speed.
+		if not runner.held or burst_from_press:
 			burst_left -= dt
 		if engine_voice != "" and site != null:
 			lean = move_toward(lean, 1.0 if flowing else 0.0, dt / maxf(config.engine_lean_time, 0.01))
 			site.sfx.set_loop_pitch(engine_voice, lerpf(1.0, config.engine_lean_pitch, lean))
 			site.sfx.set_loop_trim(engine_voice, lerpf(0.0, config.engine_lean_db, lean))
-		if flowing:
+		if ramp > 0.0:
+			rate = move_toward(rate, 1.0 if flowing else 0.0, dt / ramp)
+		else:
+			rate = 1.0 if flowing else 0.0
+		if rate > 0.0:
 			if not flowing_now:
 				if loop_group != "" and site != null:
 					site.sfx.play_loop(loop_group, voice)
 				flowing_now = true
-			k = minf(k + dt / maxf(seconds, 0.05), 1.0)
+			k = minf(k + dt * rate / maxf(seconds, 0.05), 1.0)
 			on_k.call(k)
 			runner.partial(k)
 		elif flowing_now:
@@ -184,7 +210,8 @@ func _bite(runner: JobRunner, seconds: float, config: SiteConfig, loop_group: St
 ## whichever patch they have missed.
 func _scrub(runner: JobRunner, config: SiteConfig, loop_group: String,
 		on_point: Callable, coverage: Callable, hint: Callable,
-		voice: String = "work", each_frame: Callable = Callable(), done: float = -1.0) -> void:
+		voice: String = "work", each_frame: Callable = Callable(), done: float = -1.0,
+		plane_y: float = Driveway.GRADE) -> void:
 	var site: Variant = runner.level
 	var flowing := false
 	var idle := 0.0
@@ -196,7 +223,10 @@ func _scrub(runner: JobRunner, config: SiteConfig, loop_group: String,
 		var dt := runner.get_process_delta_time()
 		if each_frame.is_valid():
 			each_frame.call(dt)
-		var at: Vector3 = site.work_point(Driveway.GRADE) if site != null else Vector3.INF
+		# The finger is dropped onto the plane the work is ON: the slab's top, or
+		# the base 10 cm under it for the plate (5.1), where a finger read at grade
+		# lands a hand's width off.
+		var at: Vector3 = site.work_point(plane_y) if site != null else Vector3.INF
 		var working := runner.held and at != Vector3.INF
 		if working:
 			# A DRAG's `on_point` answers false when the finger is not on the
@@ -448,16 +478,19 @@ func form_set(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	if drive == null:
 		return
 	var i: int = site.picked()
-	if i <= 0:
+	if i <= 0 or drive.form_is_in(i) or not drive.form_live(i):
+		# Nothing picked (GO, the keyboard): the first board still waiting in the
+		# group being set - by STATE, never "tap number n": in the kerb board's
+		# own row the tap number is 1, and board 1 went in ten minutes ago.
 		var open := drive.open_forms_in(drive.current_form_group())
-		i = open[0] if not open.is_empty() else runner.done_in_step + 1
-	# Every board waiting in the air over its own place, from the first beat of
-	# the phase. They used to be created invisible and only appear once the child
-	# had already pressed, so the gold arrow spent the first press of two whole
-	# phases pointing at bare earth.
-	if runner.done_in_step == 0:
-		for j in range(1, drive.form_count() + 1):
-			drive.set_form(j, 0.0)
+		if open.is_empty():
+			push_warning("SiteVerbs.form_set: no board is waiting")
+			return
+		i = open[0]
+	# (The boards wait in the air over their places from the moment their row
+	# opens - `SiteMain.arm_rings` hangs them. This verb used to hang ALL FOUR on
+	# its first beat, which in the kerb board's own row lifted the three boards
+	# already in back up into the air: 5.2's worst silent break.)
 	site.sfx.play_group("whoosh")
 	await _ease(runner, config.form_drop_time, func(k: float) -> void:
 		drive.set_form(i, k))
@@ -478,17 +511,17 @@ func stake_drive(runner: JobRunner, subject: Node3D, targets: Array[Node3D],
 	if drive == null or targets.is_empty():
 		return
 	var i: int = site.picked()
-	if i <= 0:
+	if i <= 0 or drive.stake_is_in(i) or not drive.stake_live(i):
 		# Nothing was picked, so this is GO or the keyboard: take the next stake
 		# of the PAIR being worked (DESIGN 1a), not the next by number. The
 		# camera is on that pair and the rings are on that pair; a blow landing
 		# on a stake nine metres up the drive would be a blow nobody saw.
 		var open := drive.open_stakes_in(drive.current_stake_group())
-		i = open[0] if not open.is_empty() else runner.done_in_step + 1
-	if runner.done_in_step == 0:
-		for j in range(1, drive.stake_count() + 1):
-			if not drive.stake_is_in(j) and not drive.stake_shown(j):
-				drive.set_stake(j, 0.0)
+		if open.is_empty():
+			push_warning("SiteVerbs.stake_drive: no peg is waiting")
+			return
+		i = open[0]
+	# (The pegs stand waiting from the moment their row opens: `arm_rings`.)
 	var head: Vector3 = drive.stake_home(i)
 	# The top of the painted cap before the blow: where the sledge's face rests,
 	# lifts off and comes back down (4.2).
@@ -532,6 +565,61 @@ func call_dump(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
 		_tool: Node3D, config: SiteConfig) -> void:
 	var site: Variant = runner.level
 	await site.bring_machine("DumpTruck", config.arrive_time)
+
+
+## THE CHILD BACKS THE TRUCK IN (the improvement plan's 1.8, decision 4): the
+## banksman's job. The tipper waits in the road, tail to the drive, engine
+## ticking over and beacon turning; a finger on it and it backs up the drive,
+## beeping, for as long as the finger holds - and stops where it is when it
+## lifts. The street leg before it stays the machine's own.
+func back_dump(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
+		_tool: Node3D, config: SiteConfig) -> void:
+	await _back_in(runner, "DumpTruck", config)
+
+
+## The mixer, backed to the kerb and no further; then its chute comes out (the
+## user's words), which is the picture that says "this is about to pour".
+func back_mixer(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
+		_tool: Node3D, config: SiteConfig) -> void:
+	await _back_in(runner, "ConcreteTruck", config)
+	var site: Variant = runner.level
+	var mixer: Machine = site.machine("ConcreteTruck")
+	if mixer == null:
+		return
+	# No gold ring over a parked truck with nothing left to hold while the chute
+	# swings out.
+	runner.mute_arrow(config.chute_out_time + 0.2)
+	site.sfx.play_group(SOUND_RAM)
+	await _ease(runner, config.chute_out_time, func(k: float) -> void:
+		mixer.set_chute(0.0, k * config.chute_fold_max))
+
+
+## The held reverse leg both trucks share.
+func _back_in(runner: JobRunner, kind: String, config: SiteConfig) -> void:
+	var site: Variant = runner.level
+	var m: Machine = site.machine(kind)
+	if m == null or site == null:
+		return
+	var path: Array[Vector3] = site.back_route(kind, m.global_position)
+	# Already lined up in play (the street leg ends facing it); a posed stop gets
+	# the same small turn here.
+	await site.face_route(m, path, true)
+	m.set_path(path, true)
+	m.set_beacon_on(true)
+	if not site.sfx.is_looping("arrive"):
+		site.sfx.play_loop(SOUND_IDLE, "arrive")
+	await _hold(runner, config.back_time, config, SOUND_BEEPER, func(k: float) -> void:
+		m.place_on_path(k * k * (3.0 - 2.0 * k))
+		# The ring follows a truck still rolling to a stop after the lift.
+		if not runner.held:
+			runner.update_arrow()
+	, "beeper", "arrive", config.back_ramp, true)
+	m.place_on_path(1.0)
+	# (No mute here: the next step's own arrow takes the ring off the truck in
+	# this same frame, and a mute across the step boundary left the tip with no
+	# ring and no mime at all when the finger was already up - the session-5
+	# verification pass.)
+	site.finish_arrival(kind)
 
 
 ## The bed goes up while the finger is down and the limestone runs out of the
@@ -595,6 +683,16 @@ func dump_leave(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	if drive != null:
 		_fade_heap(runner, drive)
 	await runner.get_tree().create_timer(config.leave_look, false).timeout
+	# And never the next beat while its body is still over the pad: the plate
+	# starts on the base and the kerb board goes in behind it, and neither may
+	# share the drive with an eighteen-tonne truck (5.2's own check). At today's
+	# numbers it has cleared it by now and this costs nothing.
+	var truck: Machine = site.machine("DumpTruck")
+	var waited := 0.0
+	while truck != null and truck.visible and waited < 6.0 \
+			and truck.global_position.z - truck.rear_overhang() < Driveway.Z_KERB + 0.6:
+		waited += runner.get_process_delta_time()
+		await runner.get_tree().process_frame
 
 
 ## The rubble heap fading out as the tipper leaves, on its own clock.
@@ -674,18 +772,12 @@ func rebar_lay(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 ## is on (`Machine.fit_chute_extension`) and the pour lands in the kerb end of
 ## the form; the come-along brings the rest up.
 ##
-## Then the chute COMES OUT (the user's words): it unfolds and swings square over
-## the form, which is the picture that says "this is about to pour".
+## It comes down the street and STOPS in the road, waiting for the child to
+## back it in (`back_mixer`, the plan's 1.8); the chute comes out after that.
 func call_mixer(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
 		_tool: Node3D, config: SiteConfig) -> void:
 	var site: Variant = runner.level
 	await site.bring_machine("ConcreteTruck", config.arrive_time)
-	var mixer: Machine = site.machine("ConcreteTruck")
-	if mixer == null:
-		return
-	site.sfx.play_group(SOUND_RAM)
-	await _ease(runner, config.chute_out_time, func(k: float) -> void:
-		mixer.set_chute(0.0, k * config.chute_fold_max))
 
 
 ## THE beat (DESIGN 2a), and the one the user asked for a visual trick on:
@@ -1191,3 +1283,141 @@ func broom_finish(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 		broom.hover(head_now + Vector3(0.0, 0.25, 0.0), Vector3.DOWN, (lift_hands - head_now).normalized())
 
 
+# --- Phase 5a: the plate compactor ----------------------------------------------------------
+
+## PACK THE BASE (the improvement plan's 5.1, the user's decision 6): one bay of
+## loose limestone per beat, DRAGGED. The plate is picked up by a finger ON it
+## and walks where that finger goes, no faster than a person walks one, kept
+## inside the forms and inside its bay; every cell round it packs, its stones lie
+## down flat and the bed goes a step paler; the picture rattles while it works.
+## A finger held still packs the plate's own patch - a plus sign - and nothing
+## more, so this cannot be `_hold`; a finger resting on the base away from the
+## plate moves nothing (the screed's rule: a tool moves only under the finger).
+func compact_base(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
+		tool: Node3D, config: SiteConfig) -> void:
+	var drive := subject as Driveway
+	var site: Variant = runner.level
+	if drive == null or site == null:
+		return
+	var plate := tool as HandTool
+	var bay := clampi(runner.done_in_step + 1, 1, drive.bay_count())
+	var band := drive.bay_range(bay)
+	var at := [site.plate_at(bay)]
+	var grab := [false]
+	# Where the finger took hold relative to the plate: a finger on the orange
+	# cowl lands a metre behind the plate on the base, and without the offset a
+	# still finger there walked the plate away (the verification pass).
+	var off := [Vector3.ZERO]
+	var work := func(finger: Vector3, dt: float) -> bool:
+		var here: Vector3 = at[0]
+		if not grab[0]:
+			if site.drag_is_world():
+				if Vector2(finger.x - here.x, finger.z - here.z).length() > config.drag_grab:
+					return false
+				off[0] = Vector3.ZERO
+			else:
+				# The press's own rule (`SiteMain.plate_under`): on the drawn
+				# machine or within reach of it on the base.
+				if not site.plate_under(site.touch_point()):
+					return false
+				off[0] = Vector3(finger.x - here.x, 0.0, finger.z - here.z)
+			grab[0] = true
+		var want: Vector3 = drive.clamp_plate(finger - off[0], bay)
+		# No further from the child's hands in one stroke than the handle
+		# reaches: past it the grip was left in the picture (the verification
+		# pass). Lifting lets the eye, and the hands, walk after it.
+		var hands: Vector3 = site.plate_hands()
+		var reach := Vector2(want.x - hands.x, want.z - hands.z)
+		if reach.length() > PLATE_REACH:
+			reach = reach.normalized() * PLATE_REACH
+			want = drive.clamp_plate(Vector3(hands.x + reach.x, 0.0, hands.z + reach.y), bay)
+		var d := want - here
+		d.y = 0.0
+		at[0] = here + d.limit_length(config.plate_speed * dt)
+		drive.paint_pack(at[0], config.plate_radius, config.pack_rate * dt, band.x, band.y)
+		site.shake_floor(config.shake_plate_floor)
+		site.hold_plate(plate, at[0], bay, true)
+		return true
+	var hint := func() -> Vector3:
+		return site.drag_tool_at
+	var each := func(dt: float) -> void:
+		# Every frame first: the rattle's floor drops and the head stops buzzing
+		# unless `work` raises them again in this same frame.
+		site.shake_floor(0.0)
+		if not runner.held:
+			grab[0] = false
+		# The eye walks after the plate only between strokes (or under a world
+		# cursor), never under a dragging finger.
+		if not runner.held or site.drag_is_world():
+			site.ease_plate_view(at[0], dt)
+		site.hold_plate(plate, at[0], bay, false)
+	await _scrub(runner, config, SOUND_PLATE, work,
+		func() -> float: return drive.pack_coverage_in(band.x, band.y),
+		hint, "plate", each, -1.0, Driveway.BASE_TOP)
+	site.shake_floor(0.0)
+	site.hold_plate(plate, at[0], bay, false)
+	# The bay's last patches go down as the plate leaves it (the plan's 1.6).
+	await _ease(runner, config.pack_finish_time, func(k: float) -> void:
+		drive.finish_pack_bay(bay, k))
+	if bay < drive.bay_count():
+		# Walked just over into the next bay at a person's pace, the eye walking
+		# after it, so the next press finds it in the next picture: never carried
+		# across the lawn, never driven at the camera.
+		var from2: Vector3 = at[0]
+		var to2: Vector3 = drive.clamp_plate(from2, bay + 1)
+		var walk: float = maxf(0.4, from2.distance_to(to2) / maxf(config.plate_speed, 0.1))
+		await _ease(runner, walk, func(k: float) -> void:
+			var p: Vector3 = from2.lerp(to2, k)
+			site.ease_plate_view(p, runner.get_process_delta_time())
+			site.hold_plate(plate, p, bay + 1, false))
+	else:
+		# Done. It goes back to the grass with the rest of the kit in the phase's
+		# hold (`SiteMain.phase_done`), upright and whole - never faded out in the
+		# held picture (the verification pass).
+		site.drag_tool_at = Vector3.INF
+
+
+# --- The end of the job: the cure and the strip -----------------------------------------------
+
+## LATER THAT DAY: the cones go across the mouth of the drive, the light goes to
+## evening and the slab goes off. It is a beat of its own now, before the child
+## strips the forms (5.3) - boards do not come off concrete broomed a second ago.
+func slab_cure(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
+		_tool: Node3D, config: SiteConfig) -> void:
+	var site: Variant = runner.level
+	if site == null:
+		return
+	await site.cure_slab(config.cure_time)
+
+
+## ONE FORM BOARD OFF (the improvement plan's 5.3): what the child put in, the
+## child takes out. Its pegs are drawn, the board is prised off the clean edge of
+## the new slab, lifted and laid on the grass, and the trench outside it is
+## backfilled. The rings are on all three at once and a tap anywhere on a board
+## counts (`SiteMain._board_under`).
+func form_strip(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
+		_tool: Node3D, config: SiteConfig) -> void:
+	var drive := subject as Driveway
+	var site: Variant = runner.level
+	if drive == null or site == null:
+		return
+	var i: int = site.picked()
+	if i <= 0 or not drive.form_strips(i) or drive.form_is_stripped(i):
+		var open := drive.open_strip_forms()
+		if open.is_empty():
+			return
+		i = open[0]
+	var pried := [false]
+	var landed := [false]
+	await _bite(runner, config.strip_board_time, config, "", func(k: float) -> void:
+		drive.strip_form(i, k)
+		if k >= Driveway.STRIP_PULL_END and not pried[0]:
+			# The board breaks free of the concrete.
+			pried[0] = true
+			site.sfx.play_group("thud")
+		if k >= 0.999 and not landed[0]:
+			landed[0] = true
+			site.sfx.play_group("thunk")
+			site.shake(config.shake_stake * 0.3)
+	)
+	drive.strip_form(i, 1.0)

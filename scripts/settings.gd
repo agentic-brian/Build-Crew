@@ -114,6 +114,18 @@ static func ear_level(step: int) -> int:
 static var enabled: bool = true
 static var path_override: String = ""
 
+## The OS's "reduce animation" switch (6.4, part 7), read ONCE and kept: a
+## DisplayServer query every frame is not free, and a flag that can change under
+## a running test is a test decided by the developer's own Windows settings.
+##
+## `motion_override` is how a harness decides it instead - 0 unset, 1 on, -1 off
+## - the same shape `SafeArea.probe_active` uses. EVERY probe sets -1: the
+## smoke measures the camera's own shake in two places, and would otherwise go
+## red on any machine whose owner has animations turned off.
+static var motion_override: int = 0
+static var _motion_known: bool = false
+static var _motion: bool = false
+
 ## Which step of the slider the game is on, 0..RUNGS-1.
 static var loudness: int = RUNGS - 1
 ## Is the song itself on? Separate from the slider, because "turn the music
@@ -142,6 +154,19 @@ static func file_path() -> String:
 ## it now gets the defaults rather than their file. The real game never sets
 ## that flag false before `Sfx._ready`, so a child's chosen loudness still comes
 ## back on every launch.
+## Is the picture to hold still for somebody who asked the OS for that? What
+## stops is the CAMERA's shake; the work itself - the slab giving way, the bit's
+## stroke, the rings saying where to tap, every answer to a finger - still moves,
+## because a toy that stops answering is not an accessible toy.
+static func motion_reduced() -> bool:
+	if motion_override != 0:
+		return motion_override > 0
+	if not _motion_known:
+		_motion_known = true
+		_motion = DisplayServer.accessibility_should_reduce_animation()
+	return _motion
+
+
 static func persists() -> bool:
 	return enabled and (path_override != "" or SaveGame.enabled)
 

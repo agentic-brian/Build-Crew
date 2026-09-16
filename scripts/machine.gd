@@ -180,6 +180,8 @@ var _driving: bool = false
 var _path: Array[Vector3] = []
 var _cum: PackedFloat32Array = PackedFloat32Array()
 var _path_rev: bool = false
+## How far along a held path (`set_path`) the machine was last stood.
+var _path_k: float = 0.0
 ## A `spin_to` in progress: turning on the spot, which is what a skid steer does
 ## instead of a three-point turn.
 var _spinning: bool = false
@@ -305,6 +307,69 @@ func follow(points: Array[Vector3], seconds: float, reverse: bool = false) -> vo
 	_drive_t = 0.0
 	_driving = true
 	_spinning = false
+
+
+## A path a VERB walks the machine along, instead of the clock: the truck backing
+## in only while the child's finger holds it (the improvement plan's 1.8, the
+## user's decision 4). The same polyline `follow` drives, but nothing advances it
+## until `place_on_path` is called, so letting go leaves the truck exactly where
+## it is. `follow` could not pause: it is `_drive_t += delta`.
+func set_path(points: Array[Vector3], reverse: bool = false) -> void:
+	_driving = false
+	_spinning = false
+	_path_k = 0.0
+	if points.size() < 2:
+		_path.clear()
+		return
+	_path = points.duplicate()
+	_path_rev = reverse
+	_cum = PackedFloat32Array()
+	_cum.resize(_path.size())
+	_cum[0] = 0.0
+	for i in range(1, _path.size()):
+		_cum[i] = _cum[i - 1] \
+			+ Vector2(_path[i].x - _path[i - 1].x, _path[i].z - _path[i - 1].z).length()
+
+
+## Stands the machine at `e` (0..1 of the path's length) along a `set_path`
+## path, facing along it, the wheels rolled the distance it moved, seated.
+func place_on_path(e: float) -> void:
+	if _path.size() < 2:
+		return
+	_path_k = clampf(e, 0.0, 1.0)
+	_advance_path(_path_k)
+	_seat()
+
+
+## How far along its held path the machine stands, 0..1.
+func path_k() -> float:
+	return _path_k
+
+
+## Does it have a path to walk (set, and not yet cleared by `place`/`spin_to`)?
+func has_path() -> bool:
+	return _path.size() >= 2
+
+
+## Which way the machine would face at `e` along the current path, in degrees
+## about Y: where a truck waiting in the road should already be pointing, so the
+## first held frame does not snap its yaw.
+func path_facing_deg(e: float) -> float:
+	if _path.size() < 2:
+		return rad_to_deg(rotation.y)
+	var total: float = _cum[_cum.size() - 1]
+	var want := clampf(e, 0.0, 1.0) * total
+	var seg := 1
+	while seg < _cum.size() - 1 and _cum[seg] < want:
+		seg += 1
+	var dir: Vector3 = _path[seg] - _path[seg - 1]
+	dir.y = 0.0
+	if dir.length_squared() < 0.000001:
+		return rad_to_deg(rotation.y)
+	var facing := dir.normalized()
+	if _path_rev:
+		facing = -facing
+	return rad_to_deg(atan2(facing.x, facing.z))
 
 
 ## Turns on the spot to face `yaw_deg`, the two tracks going opposite ways. A
@@ -757,6 +822,33 @@ func centre_model_x() -> void:
 		_model.position.x -= box.get_center().x
 
 
+## How far the model's nose (+Z) and tail (-Z) stand from this machine's origin,
+## metres, measured off its meshes: the homeowner's car parks by its nose (the
+## plan's 6.1), and the fleet's vans are not centred along their length.
+func nose_m() -> float:
+	return _model_z_extent().y
+
+
+func tail_m() -> float:
+	return -_model_z_extent().x
+
+
+## The meshes' z range in this machine's own frame, (min, max).
+func _model_z_extent() -> Vector2:
+	if _model == null:
+		return Vector2.ZERO
+	var box := AABB()
+	var first := true
+	for n in _model.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		var b := (global_transform.affine_inverse() * mi.global_transform) * mi.mesh.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	return Vector2.ZERO if first else Vector2(box.position.z, box.end.z)
+
+
 ## How wide the working edge is, metres: the blade's board or the bucket's lip.
 func edge_width() -> float:
 	return 2.04 if _blade != null else 1.58
@@ -1096,11 +1188,11 @@ func marker(node_name: String) -> Node3D:
 func _load_model() -> bool:
 	var path := model_path if model_path != "" else MODEL_DIR + kind + ".glb"
 	if not ResourceLoader.exists(path):
-		missing_nodes.append(kind + ".glb")
+		missing_nodes.append(path.get_file())
 		return false
 	var packed := ResourceLoader.load(path) as PackedScene
 	if packed == null:
-		missing_nodes.append(kind + ".glb")
+		missing_nodes.append(path.get_file())
 		return false
 	_model = packed.instantiate() as Node3D
 	if _model == null:

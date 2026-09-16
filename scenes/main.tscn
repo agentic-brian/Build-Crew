@@ -1,0 +1,15 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/title_main.gd" id="1_title"]
+[ext_resource type="Script" path="res://scripts/start_menu.gd" id="2_menu"]
+[ext_resource type="Script" path="res://scripts/settings_menu.gd" id="3_settings"]
+
+[node name="Title" type="Node3D"]
+script = ExtResource("1_title")
+
+[node name="StartMenu" type="CanvasLayer" parent="."]
+layer = 20
+script = ExtResource("2_menu")
+
+[node name="Settings" type="CanvasLayer" parent="."]
+script = ExtResource("3_settings")

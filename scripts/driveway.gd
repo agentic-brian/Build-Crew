@@ -134,6 +134,23 @@ const LAWN := Color(0.42, 0.62, 0.30)
 ## pour are two different materials at a glance: crushed limestone is a warm
 ## tan-grey, fresh concrete a cool dark one.
 const GRAVEL := Color(0.63, 0.56, 0.45)
+## The same limestone PACKED by the plate (5.1): a luma step paler, the same hue
+## - about +14% luma, which the water's -13% taught is the size of step a child
+## reads as "this part is done".
+const GRAVEL_PACKED := Color(0.70, 0.64, 0.54)
+## A cell counts as packed, and takes the whole step, from here; below it the
+## bed only warms toward the step, so the edge of the plate's path is an edge.
+const PACK_STEP := 0.90
+## How far a packed stone's own colour is taken toward white, for the same step.
+const PACK_LIGHTEN := 0.14
+## A packed stone lies with its top this far over the base: above the landing
+## marks (+4 mm) and below the chairs' feet (+8 mm), so no two faces share a
+## plane (the flicker rule).
+const STONE_FLAT_PROUD := 0.006
+## The packed bed's overlay, 2 mm over the base's top while the plate works.
+const BED_Y := 0.002
+## Half the plate's footprint (across, along), for keeping it inside the forms.
+const PLATE_HALF := Vector2(0.28, 0.30)
 ## What a cell the come-along still has to fill is drawn toward: dark wet mud.
 const SHORT_COL := Color(0.40, 0.37, 0.32)
 ## Fresh concrete is DARK. It rendered nearly white (round 3, every pour frame)
@@ -228,6 +245,25 @@ var _rubble_hidden: float = 0.0
 ## The stakes, cut into groups across the drive (`_group_stakes`): 1-based stake
 ## numbers, in order from the garage end to the kerb.
 var _stake_groups: Array[PackedInt32Array] = []
+## The board across the street end (5.2): the trucks back through it, so it and
+## its two pegs go in after the base.
+const KERB_BOARD := 3
+## The strip's schedule, as fractions of one board's beat (`strip_form`).
+const STRIP_PULL_END := 0.25
+const STRIP_PRY_END := 0.40
+const STRIP_LIFT_END := 0.70
+## How far a peg is drawn up: its foot to the trench floor, 9 cm down, so a
+## pulled peg stands in the trench and does not float over it.
+const STAKE_PULL := 0.32
+## The crew's pile of stripped boards on the right lawn (5.3): the first board's
+## middle, the step to the next, and how high a long board is lifted as it is
+## carried there over the slab and the tools.
+const STRIP_PILE_X := 6.8
+const STRIP_PILE_GAP := 0.3
+const STRIP_PILE_Z := -0.12
+const STRIP_ARC := 0.45
+var _last_form_group: int = -1
+var _last_stake_group: int = -1
 ## A marker in the middle of each group, for the camera to hang off.
 var _stake_group_marks: Array[Node3D] = []
 var _cleared_emitted: bool = false
@@ -248,6 +284,16 @@ var _gravel_k: float = 0.0
 ## crushed base read as crushed is hundreds of separate lumps with their own
 ## shadows.
 var _stones: Array[MeshInstance3D] = []
+## Each stone as it was tipped (its tilt, height, colour and cell), so packing is
+## a pure function of how packed its cell is, and the stones in each cell.
+var _stone_rest: Array = []
+var _cell_stones: Array[PackedInt32Array] = []
+## How packed each base cell is, 0..1 (5.1), and the overlay that draws it.
+var _packed: PackedFloat32Array = PackedFloat32Array()
+var _bed: MeshInstance3D
+var _bed_dirty: bool = false
+var _packed_any: bool = false
+var _pack_baked: bool = false
 
 ## The four form boards and their stakes.
 var _forms: Array = []
@@ -341,6 +387,12 @@ var _cell_lines: Array = []
 var _puddles: Array[MeshInstance3D] = []
 const PUDDLE := Color(0.60, 0.67, 0.75)
 var _markers: Dictionary = {}
+## Where the old drive's crack, stain and weed generators start (the plan's
+## 6.1): `SiteLook.CRACK_BASES`, set by `SiteMain._enter_tree` before this
+## node's own `_ready` builds the panels. 917 is the legacy drive. The spots,
+## the settled slab, the chunks and the stones never read it: which old cracks
+## a drive has changes per visit, where the child works it does not.
+var crack_base: int = 917
 
 
 func _ready() -> void:
@@ -376,7 +428,9 @@ func _build_dirt() -> void:
 	# once the old slab is out there is a real hole to put a base into. (Built as
 	# a block first time round, which quietly filled the hole to grade and buried
 	# everything that followed.)
-	_dirt = _box("Dirt", Vector3(WIDTH, 0.4, LENGTH), Vector3(CENTRE_X, -DIG - 0.2, _mid_z()), DIRT)
+	# Under the boards' 8 cm slots too: the kerb board is not in until after the
+	# base now (5.2), and its empty slot was a line of nothing from the road.
+	_dirt = _box("Dirt", Vector3(WIDTH + 0.16, 0.4, LENGTH + 0.16), Vector3(CENTRE_X, -DIG - 0.2, _mid_z()), DIRT)
 	add_child(_dirt)
 	# Four earth banks lining the hole, so its sides are soil rather than a
 	# cross-section of green lawn.
@@ -451,6 +505,15 @@ func _build_dirt() -> void:
 ## strip between the pad and the lawn (before the job, and after the forms
 ## come off); 1 is the earth trench outside the boards, cut 9 cm down.
 func set_banks(cut: float) -> void:
+	for n in range(_banks.size()):
+		set_bank(n, cut)
+
+
+## One bank (0 apron, 1 kerb, 2 left, 3 right): the strip backfills the one
+## outside the board it has just taken off, not all four at once (5.3).
+func set_bank(n: int, cut: float) -> void:
+	if n < 0 or n >= _banks.size():
+		return
 	var k := clampf(cut, 0.0, 1.0)
 	var board := 0.08
 	var bank := 0.14
@@ -461,33 +524,41 @@ func set_banks(cut: float) -> void:
 	# The kerb bank fills the crossing's 8 cm slot when it is not cut: it is
 	# the crossing's own grey there, not turf across the drive's end.
 	var kerb_col := Color(0.64, 0.64, 0.62).lerp(DIRT.darkened(0.08), clampf(k * 1.6, 0.0, 1.0))
-	for n in range(_banks.size()):
-		var mi := _banks[n] as MeshInstance3D
-		if mi == null:
-			continue
-		var bm := mi.mesh as BoxMesh
-		var along_x := n >= 2
-		var size := bm.size
-		if along_x:
-			size.x = wide
-		else:
-			size.z = wide
-		size.y = top + DIG
-		bm.size = size
-		var sign := 1.0 if (n == 1 or n == 3) else -1.0
-		if along_x:
-			mi.position.x = CENTRE_X + sign * (WIDTH * 0.5 + off)
-		else:
-			mi.position.z = (Z_KERB if n == 1 else Z_APRON) + sign * off
-			# The apron bank sits a centimetre INTO the garage, off the floor's
-			# front face (it is never seen; this is hygiene against a z-fight).
-			if n == 0:
-				mi.position.z -= 0.01
-		mi.position.y = -DIG + size.y * 0.5
-		var mat := mi.get_active_material(0)
-		if mat is StandardMaterial3D:
-			(mat as StandardMaterial3D).albedo_color = kerb_col if n == 1 else col
-		mi.visible = true
+	var mi := _banks[n] as MeshInstance3D
+	if mi == null:
+		return
+	var bm := mi.mesh as BoxMesh
+	var along_x := n >= 2
+	var size := bm.size
+	if along_x:
+		size.x = wide
+	else:
+		size.z = wide
+	size.y = top + DIG
+	bm.size = size
+	var sign := 1.0 if (n == 1 or n == 3) else -1.0
+	if along_x:
+		mi.position.x = CENTRE_X + sign * (WIDTH * 0.5 + off)
+	else:
+		mi.position.z = (Z_KERB if n == 1 else Z_APRON) + sign * off
+		# The apron bank sits a centimetre INTO the garage, off the floor's
+		# front face (it is never seen; this is hygiene against a z-fight).
+		if n == 0:
+			mi.position.z -= 0.01
+	mi.position.y = -DIG + size.y * 0.5
+	var mat := mi.get_active_material(0)
+	if mat is StandardMaterial3D:
+		(mat as StandardMaterial3D).albedo_color = kerb_col if n == 1 else col
+	mi.visible = true
+
+
+## How far bank `n` is cut, read off its box (1 the trench, 0 turfed).
+func bank_cut(n: int) -> float:
+	if n < 0 or n >= _banks.size():
+		return 0.0
+	var mi := _banks[n] as MeshInstance3D
+	var top := mi.position.y + (mi.mesh as BoxMesh).size.y * 0.5
+	return clampf((top - (-0.006)) / (-0.09 - (-0.006)), 0.0, 1.0)
 
 
 ## The loose stone lying on top of the base.
@@ -522,6 +593,26 @@ func _build_stones() -> void:
 		stone.visible = false
 		add_child(stone)
 		_stones.append(stone)
+	# What the plate needs to lay each one down (5.1), drawn from a generator of
+	# its own AFTER the stones: from the stones' own seed every stone on the base
+	# would have moved, and every frame of the base with it.
+	var jit_rng := RandomNumberGenerator.new()
+	jit_rng.seed = 4471 + 5100
+	_cell_stones.clear()
+	for c in range(CELLS_X * CELLS_Z):
+		_cell_stones.append(PackedInt32Array())
+	var cw := WIDTH / float(CELLS_X)
+	var cl := LENGTH / float(CELLS_Z)
+	for n in range(_stones.size()):
+		var s := _stones[n]
+		var ix := clampi(int(floor((s.position.x - (CENTRE_X - WIDTH * 0.5)) / cw)), 0, CELLS_X - 1)
+		var iz := clampi(int(floor((s.position.z - Z_APRON) / cl)), 0, CELLS_Z - 1)
+		var c := iz * CELLS_X + ix
+		_cell_stones[c].append(n)
+		var mat := s.get_active_material(0) as StandardMaterial3D
+		_stone_rest.append({"q": s.quaternion, "yaw": s.rotation.y, "y": s.position.y,
+			"h": (s.mesh as BoxMesh).size.y, "col": mat.albedo_color if mat != null else GRAVEL,
+			"cell": c, "jit": jit_rng.randf_range(0.0, 0.4)})
 
 
 func _build_panels() -> void:
@@ -551,7 +642,7 @@ func _build_panels() -> void:
 			# rectangle says nothing at all: this drive is cracked and stained the moment
 			# the child sees it, and the hammer adds to what is already there.
 			var rng := RandomNumberGenerator.new()
-			rng.seed = 917 + _panels.size()
+			rng.seed = crack_base + _panels.size()
 			var y_crack := SLAB_T * 0.5 + 0.006
 			# The joints of the old cracks, where the weeds grow (4.1). Read off the
 			# segments, so not one more number is drawn from `rng`: every crack and
@@ -736,7 +827,7 @@ func _build_forms() -> void:
 			marker.name = "Stake_%d_%dAt" % [i + 1, s + 1]
 			marker.position = home + Vector3(0.0, STAKE_H * 0.5, 0.0)
 			add_child(marker)
-			_stakes.append({"node": stake, "marker": marker, "home": home, "k": 0.0})
+			_stakes.append({"node": stake, "marker": marker, "home": home, "k": 0.0, "board": i + 1})
 	_group_stakes()
 
 
@@ -1148,6 +1239,8 @@ func _build_cells() -> void:
 	_fill.resize(n)
 	_watered.resize(n)
 	_brushed.resize(n)
+	_packed.resize(n)
+	_packed.fill(0.0)
 	_cell_lines.resize(n)
 	_cell_col.resize(n)
 	_struck.resize(n)
@@ -1204,6 +1297,8 @@ func _build_cells() -> void:
 func _process(_delta: float) -> void:
 	if _slab_dirty:
 		_rebuild_slab()
+	if _bed_dirty:
+		_rebuild_bed()
 
 
 ## Builds the surface from `_fill`: a fan of four triangles per drawn cell, the
@@ -1287,7 +1382,7 @@ func _rebuild_slab() -> void:
 				# And the colour runs out toward the base at a front, so the edge
 				# of a pour is soft in value as well as in height.
 				if drawn < m:
-					col = col.lerp(GRAVEL, 0.8 * float(m - drawn) / float(m))
+					col = col.lerp(gravel_colour(), 0.8 * float(m - drawn) / float(m))
 				corners.append(Vector3(cx + sx * cw * 0.5, BASE_TOP + h, cz + sz * cl * 0.5))
 				cols.append(col)
 			# (An attempt to make every unstruck cell its own tilted facet with
@@ -1324,13 +1419,16 @@ func _rebuild_slab() -> void:
 				st.set_color(cols[(k + 1) % 4])
 				st.add_vertex(b)
 			# Skirts: a wall down to the base on any INTERIOR edge facing an
-			# empty cell.
+			# empty cell - and on a PERIMETER edge once its board has been
+			# stripped off, which is the clean face of the new slab the child
+			# uncovers (5.3). Never while a board stands there.
 			for k in range(4):
 				var jx := ix + (1 if k == 1 else (-1 if k == 3 else 0))
 				var jz := iz + (1 if k == 2 else (-1 if k == 0 else 0))
 				if jx < 0 or jx >= CELLS_X or jz < 0 or jz >= CELLS_Z:
-					continue
-				if _fill[jz * CELLS_X + jx] > MIN_DRAW:
+					if not _edge_open(k):
+						continue
+				elif _fill[jz * CELLS_X + jx] > MIN_DRAW:
 					continue
 				var a: Vector3 = corners[k]
 				var b: Vector3 = corners[(k + 1) % 4]
@@ -1426,7 +1524,7 @@ func _zigzag(holder: Node3D, a: Vector3, b: Vector3, segs: int, jag: float,
 func _plant_weeds(holder: Node3D, joints: Array[Vector3], spots: Array[Node3D],
 		size: Vector2, index: int, view: Dictionary = {}) -> Array[Node3D]:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 917 + index + 5000
+	rng.seed = crack_base + index + 5000
 	var order: Array[Vector3] = joints.duplicate()
 	for i in range(order.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
@@ -2000,6 +2098,8 @@ func set_form(i: int, k: float) -> void:
 	if f.is_empty():
 		return
 	var kk := clampf(k, 0.0, 1.0)
+	if kk >= 0.999 and float(f["k"]) < 0.999:
+		_last_form_group = form_group(i)
 	f["k"] = kk
 	var node: Node3D = f["node"]
 	node.visible = true
@@ -2049,18 +2149,51 @@ func forms_in() -> int:
 func form_group(i: int) -> int:
 	if i <= 2:
 		return 0
-	return 1 if i == 3 else 2
+	return 1 if i == KERB_BOARD else 2
 
 
 func form_group_count() -> int:
 	return 3
 
 
+## Is board `i` one the job can take now? The KERB board is not, until the base
+## is laid and packed: both trucks back in through that end, and a board pinned
+## there would be driven over (the improvement plan's 5.2, the user's decision
+## 5). Which places are live is STATE, not a count of taps - the job's second
+## `form_set` row simply finds the kerb board is the only one left.
+func form_live(i: int) -> bool:
+	return i != KERB_BOARD or base_ready()
+
+
+## The base is down and packed flat: the form's open end can be closed.
+func base_ready() -> bool:
+	return _gravel_k >= 0.999 and _pack_baked
+
+
+## Is board `i` standing on the site (waiting in the air, or in)?
+func form_shown(i: int) -> bool:
+	var f := _at(_forms, i)
+	return not f.is_empty() and (f["node"] as Node3D).visible
+
+
+func form_k(i: int) -> float:
+	var f := _at(_forms, i)
+	return float(f["k"]) if not f.is_empty() else 0.0
+
+
 func open_forms_in(g: int) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	for i in range(1, _forms.size() + 1):
-		if form_group(i) == g and not form_is_in(i):
+		if form_group(i) == g and not form_is_in(i) and form_live(i):
 			out.append(i)
+	return out
+
+
+## Every board the job can take now and has not, group by group.
+func live_open_forms() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for g in range(form_group_count()):
+		out.append_array(open_forms_in(g))
 	return out
 
 
@@ -2069,6 +2202,14 @@ func current_form_group() -> int:
 		if not open_forms_in(g).is_empty():
 			return g
 	return -1
+
+
+## The group whose last board went in most recently, for the camera to stay on
+## once a row's boards are all in (-1 before any): the strip after the first
+## row, the kerb board after its own. Staying on "the last group by number"
+## put the picture 9 m away on the strip after the kerb board went in.
+func last_form_group() -> int:
+	return _last_form_group
 
 
 func form_group_mark(g: int) -> Node3D:
@@ -2131,6 +2272,8 @@ func set_stake(i: int, k: float) -> void:
 	if s.is_empty():
 		return
 	var kk := clampf(k, 0.0, 1.0)
+	if kk >= 0.999 and float(s["k"]) < 0.999:
+		_last_stake_group = int(s.get("group", -1))
 	s["k"] = kk
 	var node: Node3D = s["node"]
 	node.visible = true
@@ -2140,6 +2283,32 @@ func set_stake(i: int, k: float) -> void:
 func stake_is_in(i: int) -> bool:
 	var s := _at(_stakes, i)
 	return not s.is_empty() and float(s["k"]) >= 0.999
+
+
+## The board stake `i` pins (1-based).
+func stake_board(i: int) -> int:
+	var s := _at(_stakes, i)
+	return int(s.get("board", 0)) if not s.is_empty() else 0
+
+
+## A peg is live once ITS board is in: the kerb board's two wait for the kerb
+## board (5.2), and nothing pins a board that is not there.
+func stake_live(i: int) -> bool:
+	return form_is_in(stake_board(i))
+
+
+## The pegs of board `i`, in order along it.
+func stakes_of_form(i: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for n in range(1, _stakes.size() + 1):
+		if stake_board(n) == i:
+			out.append(n)
+	return out
+
+
+## The group whose last peg went in most recently (-1 before any).
+func last_stake_group() -> int:
+	return _last_stake_group
 
 
 func open_stakes() -> PackedInt32Array:
@@ -2166,7 +2335,7 @@ func open_stakes_in(g: int) -> PackedInt32Array:
 	if g < 0 or g >= _stake_groups.size():
 		return out
 	for i in _stake_groups[g]:
-		if not stake_is_in(i):
+		if not stake_is_in(i) and stake_live(i):
 			out.append(i)
 	return out
 
@@ -2260,6 +2429,281 @@ func stones_down() -> int:
 		if stone.visible:
 			n += 1
 	return n
+
+
+# --- Phase 5a: the plate compactor ------------------------------------------------------------
+
+## Packs the base under the plate (the improvement plan's 5.1, the user's
+## decision 6): every cell whose middle is within `radius` of the plate rises
+## toward packed, its stones lie down flat into the bed, and the bed goes a
+## step PALER where it is packed - a luma step, not a warmth, which is what a
+## child can see (the rule the water's dark and the broom's pale taught). With
+## `radius` between a cell's along-drive neighbour (0.75 m) and its diagonal
+## (0.96 m), a plate held still packs a plus sign and nothing more.
+func paint_pack(world: Vector3, radius: float, rate: float, z_lo: float = -INF, z_hi: float = INF) -> void:
+	var hits := _raise(_packed, world, radius, rate, z_lo, z_hi)
+	if hits.is_empty():
+		return
+	_pack_cells(hits)
+
+
+## One bay's last patches go down on their own as the plate lifts off it (the
+## plan's 1.6); the last bay's end bakes the packed colour into the base.
+func finish_pack_bay(b: int, k: float) -> void:
+	var band := bay_range(b)
+	var hits := PackedInt32Array()
+	for iz in range(CELLS_Z):
+		if _cell_z(iz) < band.x or _cell_z(iz) > band.y:
+			continue
+		for ix in range(CELLS_X):
+			var i := iz * CELLS_X + ix
+			if _packed[i] < k:
+				_packed[i] = maxf(_packed[i], clampf(k, 0.0, 1.0))
+				hits.append(i)
+	if not hits.is_empty():
+		_pack_cells(hits)
+	if k >= 0.999 and b >= bay_count():
+		_bake_packed()
+
+
+## A posed bay: packed flat, as the verb leaves it.
+func pack_bay(b: int) -> void:
+	finish_pack_bay(b, 1.0)
+
+
+func pack_all() -> void:
+	for b in range(1, bay_count() + 1):
+		pack_bay(b)
+	_bake_packed()
+
+
+## How much of the base (or of one band of it) is packed, 0..1.
+func pack_coverage() -> float:
+	return _mean(_packed)
+
+
+func pack_coverage_in(z_lo: float, z_hi: float) -> float:
+	var sum := 0.0
+	var n := 0
+	for iz in range(CELLS_Z):
+		if _cell_z(iz) < z_lo or _cell_z(iz) > z_hi:
+			continue
+		for ix in range(CELLS_X):
+			sum += minf(_packed[iz * CELLS_X + ix], 1.0)
+			n += 1
+	return sum / float(maxi(n, 1))
+
+
+## How packed the cell under a world point is.
+func packed_at(world: Vector3) -> float:
+	var cw := WIDTH / float(CELLS_X)
+	var cl := LENGTH / float(CELLS_Z)
+	var ix := int(floor((world.x - (CENTRE_X - WIDTH * 0.5)) / cw))
+	var iz := int(floor((world.z - Z_APRON) / cl))
+	if ix < 0 or ix >= CELLS_X or iz < 0 or iz >= CELLS_Z:
+		return 0.0
+	return _packed[iz * CELLS_X + ix]
+
+
+## The cells packed past `threshold`, as indices (a test's plus sign).
+func packed_cells(threshold: float) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for i in range(_packed.size()):
+		if _packed[i] >= threshold:
+			out.append(i)
+	return out
+
+
+## The least-packed cell's middle inside a band, on the base.
+func least_packed_in(z_lo: float, z_hi: float) -> Vector3:
+	var worst := -1
+	var low := 9.0
+	for iz in range(CELLS_Z):
+		if _cell_z(iz) < z_lo or _cell_z(iz) > z_hi:
+			continue
+		for ix in range(CELLS_X):
+			var i := iz * CELLS_X + ix
+			if _packed[i] < low:
+				low = _packed[i]
+				worst = i
+	if worst < 0:
+		return Vector3(CENTRE_X, BASE_TOP, (z_lo + z_hi) * 0.5)
+	return Vector3(_cell_x(worst % CELLS_X), BASE_TOP, _cell_z(worst / CELLS_X))
+
+
+## Where the plate waits to start bay `b`: on the middle of a cell with a
+## neighbour on every side, at the NEAR (kerb) end of the bay - nearest the eye,
+## which stands beyond that end - so the child pushes it away up the drive the
+## way an operator walks behind one, and the plate is big in the picture.
+func plate_start(b: int) -> Vector3:
+	var band := bay_range(b)
+	var cl := LENGTH / float(CELLS_Z)
+	# `- 0.01`: a bay's range is a Vector2, 32-bit, so its ends are a hair off the
+	# constants', and a bare floor on an exact row boundary lands a row out.
+	var last := int(floor((band.y - Z_APRON) / cl - 0.01))
+	var iz := clampi(last - 1, 0, CELLS_Z - 1)
+	return Vector3(_cell_x(2), BASE_TOP, _cell_z(iz))
+
+
+## A plate walked by a finger stays on the base, inside the forms and inside
+## its own bay.
+func clamp_plate(world: Vector3, b: int) -> Vector3:
+	var band := bay_range(b)
+	return Vector3(
+		clampf(world.x, CENTRE_X - WIDTH * 0.5 + PLATE_HALF.x, CENTRE_X + WIDTH * 0.5 - PLATE_HALF.x),
+		BASE_TOP,
+		clampf(world.z, band.x + PLATE_HALF.y, band.y - PLATE_HALF.y))
+
+
+## Is every stone on the base lying flat, read off the stones themselves?
+func stones_flat() -> bool:
+	for stone in _stones:
+		if not stone.visible:
+			continue
+		if stone.global_basis.y.normalized().dot(Vector3.UP) < cos(deg_to_rad(1.0)):
+			return false
+	return true
+
+
+## Is the packed colour baked into the base (the plate has done all of it)?
+func pack_baked() -> bool:
+	return _pack_baked
+
+
+## What colour the base is drawn now: loose limestone, or packed.
+func gravel_colour() -> Color:
+	return GRAVEL_PACKED if _pack_baked else GRAVEL
+
+
+## The colour a cell of the bed is drawn at its packing.
+func _pack_col(p: float) -> Color:
+	if p >= PACK_STEP:
+		return GRAVEL_PACKED
+	return GRAVEL.lerp(GRAVEL_PACKED, 0.30 * p / PACK_STEP)
+
+
+## Raises a coverage grid round a point without repainting any concrete: the
+## plate works under the slab's cells, which `_paint` would redraw every frame.
+func _raise(grid: PackedFloat32Array, world: Vector3, radius: float,
+		rate: float, z_lo: float = -INF, z_hi: float = INF) -> PackedInt32Array:
+	var hit := PackedInt32Array()
+	var r := maxf(radius, 0.05)
+	for iz in range(CELLS_Z):
+		if _cell_z(iz) < z_lo or _cell_z(iz) > z_hi:
+			continue
+		for ix in range(CELLS_X):
+			var d := Vector2(_cell_x(ix) - world.x, _cell_z(iz) - world.z).length()
+			if d > r:
+				continue
+			var i := iz * CELLS_X + ix
+			if grid[i] >= 1.0:
+				continue
+			grid[i] = minf(grid[i] + rate * (1.0 - 0.6 * d / r), 1.0)
+			hit.append(i)
+	return hit
+
+
+## The stones of the packed cells lie down into the bed, a ragged front rather
+## than a tile at a time (each stone has its own `jit`), and take the packed
+## step of colour; the bed is redrawn.
+func _pack_cells(cells: PackedInt32Array) -> void:
+	_packed_any = true
+	for c in cells:
+		if c < 0 or c >= _cell_stones.size():
+			continue
+		for n in _cell_stones[c]:
+			var rest: Dictionary = _stone_rest[n]
+			var u := clampf((_packed[c] - float(rest["jit"])) / 0.5, 0.0, 1.0)
+			var stone := _stones[n]
+			var flat := Quaternion(Vector3.UP, float(rest["yaw"]))
+			stone.quaternion = Quaternion(rest["q"]).slerp(flat, u)
+			var h: float = rest["h"]
+			stone.position.y = lerpf(float(rest["y"]), BASE_TOP - h * 0.5 + STONE_FLAT_PROUD, u)
+			var mat := stone.get_active_material(0) as StandardMaterial3D
+			if mat != null:
+				var col: Color = rest["col"]
+				mat.albedo_color = col.lightened(PACK_LIGHTEN) if _packed[c] >= PACK_STEP else col
+	_bed_dirty = true
+	if not is_processing():
+		set_process(true)
+
+
+## The packed colour becomes the base's own, and the overlay bed goes: once the
+## plate is done there is no plane left 2 mm over the base to fight the pour's
+## front, the landing marks or the chairs' feet.
+func _bake_packed() -> void:
+	_pack_baked = true
+	_packed_any = true
+	var mat := _gravel.get_active_material(0) as StandardMaterial3D
+	if mat != null:
+		mat.albedo_color = GRAVEL_PACKED
+	if _bed != null:
+		_bed.visible = false
+	_bed_dirty = false
+
+
+## The bed: one fan of four triangles per cell at `BASE_TOP + BED_Y`, coloured by
+## how packed it is, the corners blended with the neighbours' so the step reads
+## as the ground changing and not as tiles.
+func _rebuild_bed() -> void:
+	_bed_dirty = false
+	if _pack_baked or not _packed_any:
+		if _bed != null:
+			_bed.visible = false
+		return
+	if _bed == null:
+		_bed = MeshInstance3D.new()
+		_bed.name = "PackedBed"
+		_bed.mesh = ArrayMesh.new()
+		var mat := StandardMaterial3D.new()
+		mat.vertex_color_use_as_albedo = true
+		mat.vertex_color_is_srgb = true
+		mat.albedo_color = Color.WHITE
+		mat.roughness = 0.9
+		_bed.material_override = mat
+		_bed.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_bed)
+	var mesh := _bed.mesh as ArrayMesh
+	mesh.clear_surfaces()
+	var cw := WIDTH / float(CELLS_X)
+	var cl := LENGTH / float(CELLS_Z)
+	var y := BASE_TOP + BED_Y
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_normal(Vector3.UP)
+	for iz in range(CELLS_Z):
+		for ix in range(CELLS_X):
+			var i := iz * CELLS_X + ix
+			var centre := Vector3(_cell_x(ix), y, _cell_z(iz))
+			var ccol := _pack_col(_packed[i])
+			var corners: Array[Vector3] = []
+			var cols: Array[Color] = []
+			for k in range(4):
+				var sx := -1 if (k == 0 or k == 3) else 1
+				var sz := -1 if (k == 0 or k == 1) else 1
+				var col := Color(0.0, 0.0, 0.0, 0.0)
+				var m := 0
+				for dz in range(2):
+					for dx in range(2):
+						var jx := ix + (sx if dx == 1 else 0)
+						var jz := iz + (sz if dz == 1 else 0)
+						if jx < 0 or jx >= CELLS_X or jz < 0 or jz >= CELLS_Z:
+							continue
+						col += _pack_col(_packed[jz * CELLS_X + jx])
+						m += 1
+				corners.append(Vector3(centre.x + sx * cw * 0.5, y, centre.z + sz * cl * 0.5))
+				cols.append(col / float(maxi(m, 1)))
+			# Corners 0 (-x,-z), 1 (+x,-z), 2 (+x,+z), 3 (-x,+z): clockwise from
+			# above, and Godot's front face is clockwise - centre, a, b.
+			for k in range(4):
+				st.set_color(ccol)
+				st.add_vertex(centre)
+				st.set_color(cols[k])
+				st.add_vertex(corners[k])
+				st.set_color(cols[(k + 1) % 4])
+				st.add_vertex(corners[(k + 1) % 4])
+	st.commit(mesh)
+	_bed.visible = _gravel_k >= 0.999
 
 
 ## What a machine standing at `at` really stands ON, in world y.
@@ -3203,38 +3647,228 @@ func broomed() -> bool:
 
 # --- The payoff -------------------------------------------------------------------------------
 
-## The forms come away: `k` 0 still standing, 1 gone. The boards lift and fade
-## rather than vanishing on a frame, so a child sees them being taken off.
+## Every board the child strips, at once: `k` 0 still standing, 1 laid on the
+## grass. What a posed picture past the strip uses; play strips one board a
+## tap (`strip_form`, the improvement plan's 5.3).
 func strip_forms(k: float) -> void:
+	for i in strip_boards():
+		strip_form(i, k)
+
+
+## The boards that come off: the two long ones and the kerb board. The
+## expansion strip is part of the slab and stays.
+func strip_boards() -> PackedInt32Array:
+	return PackedInt32Array([1, 2, KERB_BOARD])
+
+
+func form_strips(i: int) -> bool:
+	return strip_boards().has(i)
+
+
+func form_is_stripped(i: int) -> bool:
+	var f := _at(_forms, i)
+	return not f.is_empty() and float(f.get("strip", 0.0)) >= 0.999
+
+
+## The boards still to strip, in the order the rings are lit.
+func open_strip_forms() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for i in strip_boards():
+		if not form_is_stripped(i):
+			out.append(i)
+	return out
+
+
+## Which way board `i` comes away from the slab, in world space: outward.
+func form_out(i: int) -> Vector3:
+	match i:
+		1:
+			return Vector3.LEFT
+		2:
+			return Vector3.RIGHT
+		KERB_BOARD:
+			return Vector3.BACK
+	return Vector3.FORWARD
+
+
+## Which bank lies outside board `i` (the banks are apron, kerb, left, right).
+func bank_of_form(i: int) -> int:
+	match i:
+		1:
+			return 2
+		2:
+			return 3
+		KERB_BOARD:
+			return 1
+	return 0
+
+
+## Where the ring for stripping board `i` stands: on the board's top, near the
+## kerb end for a long board (in every strip picture), in the middle of the kerb
+## board.
+func strip_ring_point(i: int) -> Vector3:
+	var h := form_home(i)
+	if i == KERB_BOARD:
+		return Vector3(h.x, GRADE + 0.02, h.z)
+	return Vector3(h.x, GRADE + 0.02, Z_KERB - 2.2)
+
+
+## The two ends of board `i`'s top edge where it stands now, for a tap to be
+## measured against the whole 9 m board and not only its ring.
+func form_line_world(i: int) -> PackedVector3Array:
+	var f := _at(_forms, i)
+	if f.is_empty():
+		return PackedVector3Array()
+	var mi := f["node"] as MeshInstance3D
+	var size: Vector3 = mi.mesh.get_aabb().size
+	var along := Vector3(size.x * 0.5, size.y * 0.5, 0.0) if size.x > size.z else Vector3(0.0, size.y * 0.5, size.z * 0.5)
+	var xf := mi.global_transform
+	var top_a := Vector3(-along.x, along.y, -along.z)
+	return PackedVector3Array([xf * top_a, xf * along])
+
+
+## Board `i` coming off, as a PURE function of `k` from where it stood (so a
+## posed picture and the tap agree):
+##   0.00-0.25  its pegs are drawn up out of the ground, one after another
+##   0.25-0.40  the board is prised OUT about its bottom outside edge, a few
+##              degrees - the clean face of the new slab shows behind it
+##   0.40-0.70  it lifts straight up, still tipped
+##   0.70-1.00  it is swung down flat onto the grass beside its edge (the kerb
+##              board over the cones to the left lawn), its pegs laid on it;
+##              the trench outside it is backfilled as it goes
+## Nothing fades: on a site things are carried, and they go at the cut.
+func strip_form(i: int, k: float) -> void:
+	var f := _at(_forms, i)
+	if f.is_empty() or not form_strips(i):
+		return
 	var kk := clampf(k, 0.0, 1.0)
-	for i in range(_forms.size()):
-		# The expansion strip is part of the slab: it stays.
-		if i == 3:
-			continue
-		var f: Dictionary = _forms[i]
-		var node: Node3D = f["node"]
-		node.position = Vector3(f["home"]) + Vector3(0.0, 0.7 * kk, 0.0)
-		if node is MeshInstance3D:
-			var mat := (node as MeshInstance3D).get_active_material(0)
-			if mat is StandardMaterial3D:
-				var sm := mat as StandardMaterial3D
-				sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if kk > 0.0 else BaseMaterial3D.TRANSPARENCY_DISABLED
-				sm.albedo_color = Color(TIMBER.r, TIMBER.g, TIMBER.b, 1.0 - kk)
-		node.visible = kk < 0.999
-	# The stakes come out FIRST, over the first half, drawn up out of the ground
-	# the way the boards are lifted: they used to blink out on one frame halfway,
-	# which ten pink caps made the loudest thing in the cure's wide (session 4).
-	var u := clampf(kk * 2.0, 0.0, 1.0)
-	for s: Dictionary in _stakes:
+	f["strip"] = kk
+	var mi := f["node"] as MeshInstance3D
+	mi.visible = true
+	var size: Vector3 = mi.mesh.get_aabb().size
+	var home: Vector3 = f["home"]
+	var out := form_out(i)
+	var t := size.x if i != KERB_BOARD else size.z
+	var h := size.y
+	var pry_deg: float = config.strip_pry_deg if config != null else 6.0
+	if i == KERB_BOARD:
+		pry_deg *= 0.5
+	var lift: float = config.strip_lift if config != null else 0.30
+	var axis := Vector3.UP.cross(out).normalized()
+	var pivot := home + out * (t * 0.5) + Vector3.DOWN * (h * 0.5)
+	# Pry, then lift.
+	var pry := _smooth01((kk - STRIP_PULL_END) / (STRIP_PRY_END - STRIP_PULL_END))
+	var up := _smooth01((kk - STRIP_PRY_END) / (STRIP_LIFT_END - STRIP_PRY_END)) * lift
+	var pr := Basis(axis, deg_to_rad(pry_deg) * pry)
+	var raised := Transform3D(pr, pivot + pr * (home - pivot) + Vector3.UP * up)
+	var lay := _strip_lay(i, size)
+	var swing := _smooth01((kk - STRIP_LIFT_END) / (1.0 - STRIP_LIFT_END))
+	var xf := raised
+	if swing > 0.0:
+		var q := raised.basis.get_rotation_quaternion().slerp(lay.basis.get_rotation_quaternion(), swing)
+		var arc := (0.9 if i == KERB_BOARD else STRIP_ARC) * sin(PI * swing)
+		# Across first, then down: the sideways travel is done by 80% of the
+		# swing and the height follows the whole of it, so a board carried to the
+		# pile never skims through the boards already lying there (the
+		# verification pass: the kerb board swung through the laid left board).
+		var hs := _smooth01(swing / 0.8)
+		var at := raised.origin.lerp(lay.origin, hs)
+		at.y = lerpf(raised.origin.y, lay.origin.y, swing) + arc
+		xf = Transform3D(Basis(q), at)
+	mi.transform = xf
+	var mark := f.get("mark") as Node3D
+	if mark != null:
+		mark.visible = false
+	# The pegs: drawn up first (staggered along the board), then carried onto it.
+	var pegs := stakes_of_form(i)
+	for p in range(pegs.size()):
+		var s := _at(_stakes, pegs[p])
 		var sn := s["node"] as Node3D
-		if float(s["k"]) >= 0.999:
-			sn.position = Vector3(s["home"]) + Vector3(0.0, STAKE_STUB + 0.6 * u, 0.0)
-		_fade(sn, 1.0 - u)
-		sn.visible = u < 0.999
-	# And the trench outside the boards - the boards' own slot included - is
-	# BACKFILLED and turfed as the forms come off, so the finished drive is not
-	# framed by a ditch or by a ribbon of earth (rounds 5 and 10).
-	set_banks(1.0 - kk)
+		if not sn.visible and float(s["k"]) < 0.999:
+			continue
+		sn.visible = true
+		var delay := 0.04 * float(p)
+		var pull := _smooth01((kk - delay) / maxf(STRIP_PULL_END - delay, 0.05))
+		var standing := Vector3(s["home"]) + Vector3(0.0, STAKE_STUB + STAKE_PULL * pull, 0.0)
+		var sxf := Transform3D(Basis.IDENTITY, standing)
+		if swing > 0.0:
+			var on_board := _peg_on_laid(i, pegs[p], lay, size)
+			var sq := Quaternion.IDENTITY.slerp(on_board.basis.get_rotation_quaternion(), swing)
+			sxf = Transform3D(Basis(sq), standing.lerp(on_board.origin, swing) + Vector3.UP * (0.25 * sin(PI * swing)))
+		sn.transform = sxf
+	# The slab's edge on this side is open to the eye from the moment the board
+	# leaves it, so it gets its face (`_rebuild_slab`).
+	var open := kk >= STRIP_PULL_END
+	if bool(f.get("edge_open", false)) != open:
+		f["edge_open"] = open
+		_slab_dirty = true
+	# The trench outside it goes back to turf once the board's bottom is out of it.
+	set_bank(bank_of_form(i), 1.0 - _smooth01((kk - 0.55) / 0.35))
+	# The apron's bank is never seen; it goes back with the last board, so the
+	# finished lot is the one the payoff was always posed with.
+	if open_strip_forms().is_empty():
+		set_bank(0, 0.0)
+
+
+## Where board `i` ends up: laid flat on the crew's PILE on the right lawn,
+## side by side along the drive, old outer face down. A 9.16 m board has nowhere
+## else to lie on this lot: between the garage's front and the footway there are
+## 7.9 m, so "beside its own edge" put a metre of every long board inside the
+## footway and the kerb board with it (the verification pass). Right of the
+## garage, clear of the site fence, the tools' rest and the footway.
+func _strip_lay(i: int, size: Vector3) -> Transform3D:
+	var out := form_out(i)
+	var axis := Vector3.UP.cross(out).normalized()
+	var slot := {1: 0, 2: 1, KERB_BOARD: 2}.get(i, 0) as int
+	var x := STRIP_PILE_X + STRIP_PILE_GAP * float(slot)
+	if i == KERB_BOARD:
+		var b := Basis(Vector3.UP, deg_to_rad(90.0)) * Basis(Vector3.RIGHT, deg_to_rad(90.0))
+		return Transform3D(b, Vector3(x, size.z * 0.5 + 0.003, STRIP_PILE_Z + 1.1))
+	return Transform3D(Basis(axis, deg_to_rad(90.0)), Vector3(x, size.x * 0.5 + 0.003, STRIP_PILE_Z))
+
+
+## A pulled peg lying across its laid board, at its own place along it.
+func _peg_on_laid(i: int, peg: int, lay: Transform3D, size: Vector3) -> Transform3D:
+	var s := _at(_stakes, peg)
+	var home: Vector3 = s["home"]
+	var fh := form_home(i)
+	var top := size.x * 0.5 if i != KERB_BOARD else size.z * 0.5
+	if i == KERB_BOARD:
+		# The kerb board lies along +Z on the left lawn: its pegs across it.
+		var along_k := home.x - fh.x
+		return Transform3D(Basis(Vector3.BACK, deg_to_rad(90.0)),
+			Vector3(lay.origin.x, lay.origin.y + top + 0.026, lay.origin.z + along_k))
+	var out := form_out(i)
+	var along := home.z - fh.z
+	return Transform3D(Basis(Vector3.UP.cross(out).normalized(), deg_to_rad(90.0)),
+		Vector3(lay.origin.x, lay.origin.y + top + 0.026, lay.origin.z + along))
+
+
+## The crew carries the stripped boards and their pegs off at the cut to the
+## street, with the rest of the kit (`SiteMain._clear_kit`).
+func carry_off_forms() -> void:
+	for i in strip_boards():
+		var f := _at(_forms, i)
+		if f.is_empty() or float(f.get("strip", 0.0)) < 0.999:
+			continue
+		(f["node"] as Node3D).visible = false
+		for p in stakes_of_form(i):
+			(_at(_stakes, p)["node"] as Node3D).visible = false
+
+
+## Is the slab's edge on side `k` of `_rebuild_slab`'s skirt loop (0 -z apron,
+## 1 +x, 2 +z kerb, 3 -x) open to the eye - its board stripped away?
+func _edge_open(k: int) -> bool:
+	var board := {1: 2, 2: KERB_BOARD, 3: 1}.get(k, 0) as int
+	if board == 0:
+		return false
+	var f := _at(_forms, board)
+	return not f.is_empty() and bool(f.get("edge_open", false))
+
+
+func _smooth01(x: float) -> float:
+	var c := clampf(x, 0.0, 1.0)
+	return c * c * (3.0 - 2.0 * c)
 
 
 ## The crew takes the broken-out concrete away with them: `k` 0 the heap is still
@@ -3301,19 +3935,34 @@ func rubble_gone() -> bool:
 	return true
 
 
+## Is every board the child strips off? Read off the boards' own state, not a
+## visibility: a stripped board lies on the grass, seen, until the cut.
 func forms_stripped() -> bool:
 	if _forms.is_empty():
 		return false
-	return not (_forms[0]["node"] as Node3D).visible
+	return open_strip_forms().is_empty()
 
 
-## Where a car parks on the finished drive, and which way it faces (it noses in
-## toward the garage).
-func park_spot() -> Vector3:
-	return Vector3(CENTRE_X, GRADE, Z_APRON + 2.4)
+## How far a parked car's nose stands off the garage's front (the plan's 6.1):
+## the hatchback's gap since it first parked, now kept for every car. At one
+## fixed spot a 5.45 m pickup's nose went through the shut door.
+const PARK_NOSE_GAP := 0.385
+
+
+## Where a car parks on the finished drive (it noses in toward the garage, yaw
+## 180): its origin `nose_m` behind its nose (`Machine.nose_m`), so its nose
+## stands `PARK_NOSE_GAP` off the garage whatever its length. The hatchback's
+## 2.015 m is the legacy spot, z -1.0.
+func park_spot(nose_m: float = 2.015) -> Vector3:
+	return Vector3(CENTRE_X, GRADE, Z_APRON + PARK_NOSE_GAP + nose_m)
 
 
 # --- Posing (tests and screenshots) -----------------------------------------------------------
+
+## The stages a drive is posed at, in the order the job makes them. A resumed
+## job (6.2) reads this to find the stage a saved step stands on.
+const STAGE_ORDER := ["old", "broken", "cleared", "formed", "staked", "tipped", "packed", "kerbed",
+	"based", "rebar", "banded", "poured", "sprayed", "screeded", "jointed", "cured", "done", "parked"]
 
 ## Puts the whole driveway into the state a given phase STARTS in, with no
 ## animation: the only honest way to take a screenshot of phase 8 without
@@ -3324,20 +3973,25 @@ func pose_stage(stage: String) -> void:
 	# stage name quietly poses nothing at all.
 	# `rebar` is the steel down on the base; `banded` is the kerb end the chute can
 	# reach filled and the rest still bare - the picture the rake starts from.
-	var order := ["old", "broken", "cleared", "formed", "staked", "based", "rebar", "banded",
-		"poured", "sprayed", "screeded", "jointed", "done", "parked"]
+	# `tipped` is the base down and loose (the plate is next), `packed` the base
+	# packed with the kerb board waiting over its slot, `kerbed` that board in and
+	# its two pegs waiting; `cured` is the broomed slab gone off, forms still on;
+	# `done` is the forms stripped (the fifth session, 2026-09-15).
+	var order := STAGE_ORDER
 	var at := order.find(stage)
 	if at < 0:
 		return
-	# The two extra stages shift everything after `based` by two.
-	var poured_at := 8
+	# Every threshold by NAME: the fifth session inserted four stages and the
+	# old magic numbers each meant a different picture overnight.
+	var s := func(name: String) -> int: return order.find(name)
+	var poured_at: int = s.call("poured")
 	if at >= 1:
 		for i in range(1, panel_count() + 1):
 			for sp in range(1, SPOTS_PER_PANEL + 1):
 				jack_spot((i - 1) * SPOTS_PER_PANEL + sp, 1.0)
 			break_panel(i, false)
 		set_banks(1.0)
-	if at >= 2:
+	if at >= s.call("cleared"):
 		# Through the same heap the push builds: posing every chunk at ONE
 		# point made a heap a tenth the size of the drive in every wide shot
 		# after it (round 6, and the ninth pose/play drift).
@@ -3347,25 +4001,43 @@ func pose_stage(stage: String) -> void:
 	# Waiting in the air over their places, which is how the forms phase OPENS -
 	# a posed shot that hides them cannot show what the arrow is pointing at, and
 	# a critic judging from poses would keep re-finding a fault that is fixed.
-	if at >= 2:
+	# Not the KERB board: it is not on site until the base is packed (5.2).
+	if at >= s.call("cleared"):
 		for i in range(1, form_count() + 1):
-			set_form(i, 0.0)
-	if at >= 3:
-		for i in range(1, stake_count() + 1):
-			set_stake(i, 0.0)
-	if at >= 3:
+			if i != KERB_BOARD:
+				set_form(i, 0.0)
+	if at >= s.call("formed"):
 		for i in range(1, form_count() + 1):
-			set_form(i, 1.0)
-	if at >= 4:
+			if i != KERB_BOARD:
+				set_form(i, 1.0)
 		for i in range(1, stake_count() + 1):
-			set_stake(i, 1.0)
-	if at >= 5:
+			if stake_board(i) != KERB_BOARD:
+				set_stake(i, 0.0)
+	if at >= s.call("staked"):
+		for i in range(1, stake_count() + 1):
+			if stake_board(i) != KERB_BOARD:
+				set_stake(i, 1.0)
+	if at >= s.call("tipped"):
 		gravel_fill(1.0)
-	if at >= 6:
+		# The heap is loaded out once the base is down (the muck-away lorry
+		# takes it while the steel is being laid - off screen): it was the
+		# busiest thing in the corner of six working frames (round 13).
+		hide_rubble(1.0)
+	if at >= s.call("packed"):
+		pack_all()
+		set_form(KERB_BOARD, 0.0)
+	if at >= s.call("kerbed"):
+		set_form(KERB_BOARD, 1.0)
+		for i in stakes_of_form(KERB_BOARD):
+			set_stake(i, 0.0)
+	if at >= s.call("based"):
+		for i in stakes_of_form(KERB_BOARD):
+			set_stake(i, 1.0)
+	if at >= s.call("rebar"):
 		show_chairs(true)
 		for i in range(1, bar_count() + 1):
 			set_bar(i, 1.0)
-	if at == 7:
+	if at == s.call("banded"):
 		var full_b := GRADE - BASE_TOP
 		var heap_b: float = config.pour_heap if config != null else 0.045
 		for iz in range(CELLS_Z):
@@ -3384,7 +4056,7 @@ func pose_stage(stage: String) -> void:
 			_fill[i] = full * 0.94
 		_refresh_cells()
 		set_wet(config.wet_poured if config != null else 0.80)
-	if at >= poured_at + 1:
+	if at >= s.call("sprayed"):
 		# Wetted the way the child wets it - every cell soaked, through the same
 		# coverage grid - rather than by one number written over the whole slab, or
 		# a posed picture cannot show the patchwork that IS the phase.
@@ -3395,25 +4067,20 @@ func pose_stage(stage: String) -> void:
 		_wet_target = soaked
 		for i in range(_cell_col.size()):
 			_paint_cell(i)
-	if at >= poured_at + 2:
+	if at >= s.call("screeded"):
 		screed(1.0)
-	if at >= poured_at + 3:
+	if at >= s.call("jointed"):
 		for i in range(1, joint_count() + 1):
 			cut_joint(i, 1.0)
-	if at >= poured_at + 4:
-		# Dried, as `SiteMain._cure` leaves it in play. Without this the posed
+	if at >= s.call("cured"):
+		# Dried, as the cure leaves it in play. Without this the posed
 		# screenshot showed the broom finish at four times the contrast it will
 		# ever really have, and every judgement made off it was flattering.
 		set_wet(0.06)
 		broom(1.0)
-	if at >= 5:
-		# The heap is loaded out once the base is down (the muck-away lorry
-		# takes it while the steel is being laid - off screen): it was the
-		# busiest thing in the corner of six working frames (round 13).
-		hide_rubble(1.0)
-	if at >= poured_at + 5:
-		# `parked` only: the forms come off during the payoff, so a picture of
-		# `done` still has them.
+	if at >= s.call("done"):
+		# The child has stripped the forms by `done` now (5.3): laid on the grass
+		# beside their edges; `parked` has them carried off (`SiteMain._clear_kit`).
 		strip_forms(1.0)
 
 
@@ -3534,7 +4201,7 @@ func pool_colour_at(world: Vector3) -> Color:
 	var iz := clampi(int(floor((world.z - Z_APRON) / cl)), 0, CELLS_Z - 1)
 	var i := iz * CELLS_X + ix
 	if _fill[i] <= MIN_DRAW:
-		return GRAVEL.lerp(_base_col, 0.5)
+		return gravel_colour().lerp(_base_col, 0.5)
 	return _drawn_col(ix, iz, i)
 
 

@@ -27,6 +27,8 @@ const MODELS := {
 	"broom": "res://assets/models/props/Broom.glb",
 	"hose": "res://assets/models/props/HoseNozzle.glb",
 	"rake": "res://assets/models/props/ComeAlong.glb",
+	# The plate compactor (the improvement plan's 5.1): `make_site_props.py`.
+	"plate": "res://assets/models/props/PlateCompactor.glb",
 }
 ## What each kind promises, so a silently half-exported GLB is reported rather
 ## than quietly making a tool with nothing to move.
@@ -38,6 +40,7 @@ const WANTED := {
 	"broom": ["Body", "Head", "Tip"],
 	"hose": ["Body", "Tip"],
 	"rake": ["Body", "Head", "Tip"],
+	"plate": ["Body", "Head", "Grip", "Tip"],
 }
 ## The kinds that throw something out of their nozzle.
 const SPRAYERS: Array[String] = ["hose"]
@@ -175,7 +178,7 @@ func pose(origin: Vector3, into: Vector3, up: Vector3 = Vector3.UP) -> Transform
 # --- The moving parts ----------------------------------------------------------------------
 
 ## The kinds whose handle is stretched into the child's hands.
-const HANDLED := ["rake", "broom", "jointer"]
+const HANDLED := ["rake", "broom", "jointer", "plate"]
 
 
 ## Stretches the handle so its grip ends in the child's HANDS: the Body node
@@ -601,6 +604,15 @@ func _build_placeholder() -> void:
 				Color(0.80, 0.82, 0.85)))
 			_model.add_child(_box("Body", Vector3(0.034, 1.5, 0.034), Vector3(0.0, 0.78, -0.52),
 				Color(0.62, 0.44, 0.26)))
+		"plate":
+			# The GLB's tool-orange engine on its plate, handle toward the hands.
+			var ph := _box("Head", Vector3(0.50, 0.56, 0.30), Vector3(0.0, 0.0, -0.15),
+				Color(0.62, 0.27, 0.03))
+			_model.add_child(ph)
+			_bit = ph
+			_bit_home = ph.position
+			_model.add_child(_box("Body", Vector3(0.03, 0.95, 0.03), Vector3(0.0, 0.47, -0.45),
+				Color(0.20, 0.21, 0.24)))
 		_:
 			_model.add_child(_box("Body", Vector3(0.035, 0.035, 0.14), Vector3(0.0, 0.0, -0.07),
 				Color(0.20, 0.62, 0.30)))

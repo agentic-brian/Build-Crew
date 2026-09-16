@@ -113,6 +113,11 @@ func _ready() -> void:
 	# Rings go in last, so a tap draws on top of everything else.
 	_build_rings()
 	set_pads_enabled(false)
+	# Every corner control walks in off whatever the screen's own hardware takes
+	# (6.4): a notch, an Island, a rounded corner, a home indicator. A phone
+	# turned over, or a window resized, puts those edges somewhere else.
+	place_in_safe_area()
+	get_viewport().size_changed.connect(place_in_safe_area)
 
 
 # --- Pads ----------------------------------------------------------------------------
@@ -122,11 +127,54 @@ func _build_pads() -> void:
 	var m := pad_margin
 	var g := pad_gap
 	# Left pad: up over down, in the bottom-left corner.
-	_add_pad("up", PadButton.Arrow.UP, Vector4(0.0, 1.0, 0.0, 1.0), Rect2(m, -(m + 2.0 * s + g), s, s))
-	_add_pad("down", PadButton.Arrow.DOWN, Vector4(0.0, 1.0, 0.0, 1.0), Rect2(m, -(m + s), s, s))
+	_add_pad("up", PadButton.Arrow.UP, Vector4(0.0, 1.0, 0.0, 1.0), _pad_rect("up", m, m, m))
+	_add_pad("down", PadButton.Arrow.DOWN, Vector4(0.0, 1.0, 0.0, 1.0), _pad_rect("down", m, m, m))
 	# Right pad: left beside right, in the bottom-right corner.
-	_add_pad("left", PadButton.Arrow.LEFT, Vector4(1.0, 1.0, 1.0, 1.0), Rect2(-(m + 2.0 * s + g), -(m + s), s, s))
-	_add_pad("right", PadButton.Arrow.RIGHT, Vector4(1.0, 1.0, 1.0, 1.0), Rect2(-(m + s), -(m + s), s, s))
+	_add_pad("left", PadButton.Arrow.LEFT, Vector4(1.0, 1.0, 1.0, 1.0), _pad_rect("left", m, m, m))
+	_add_pad("right", PadButton.Arrow.RIGHT, Vector4(1.0, 1.0, 1.0, 1.0), _pad_rect("right", m, m, m))
+
+
+## Where one pad sits, as anchored offsets, given how far its own edges must
+## stand off the screen's. Written once so `place_in_safe_area` can lay the same
+## four pads again off the hardware's insets - the pour is the one beat that
+## shows all four, and two of them sit under a phone's Island untouched.
+func _pad_rect(key: String, m_left: float, m_right: float, m_bottom: float) -> Rect2:
+	var s := pad_button_size
+	var g := pad_gap
+	match key:
+		"up":
+			return Rect2(m_left, -(m_bottom + 2.0 * s + g), s, s)
+		"down":
+			return Rect2(m_left, -(m_bottom + s), s, s)
+		"left":
+			return Rect2(-(m_right + 2.0 * s + g), -(m_bottom + s), s, s)
+	return Rect2(-(m_right + s), -(m_bottom + s), s, s)
+
+
+## Walks every corner control in off the screen's own hardware. Overridden by
+## `SiteHud` for the two controls it adds (GO and NEXT share the pads' corner).
+func place_in_safe_area() -> void:
+	var safe := SafeArea.insets(get_viewport())
+	if _home != null:
+		var s := corner_button_size
+		var right := corner_button_margin + safe.z
+		var top := corner_button_margin + safe.y
+		_home.offset_right = -right
+		_home.offset_left = -right - s
+		_home.offset_top = top
+		_home.offset_bottom = top + s
+	if _bar != null:
+		_bar.offset_top = 26.0 + safe.y
+		_bar.offset_bottom = 26.0 + safe.y + bar_size.y
+	for key: String in ["up", "down", "left", "right"]:
+		var pad := _pads.get(key) as Control
+		if pad == null:
+			continue
+		var r := _pad_rect(key, pad_margin + safe.x, pad_margin + safe.z, pad_margin + safe.w)
+		pad.offset_left = r.position.x
+		pad.offset_top = r.position.y
+		pad.offset_right = r.position.x + r.size.x
+		pad.offset_bottom = r.position.y + r.size.y
 
 
 func _add_pad(pad_name: String, arrow: PadButton.Arrow, anchors: Vector4, rect: Rect2) -> void:

@@ -29,6 +29,11 @@ signal beat_done(progress: int)
 signal step_done(i: int)
 ## The last step is finished: the driveway is built.
 signal job_done
+## Where the child is in the job changed: step `index` was entered, or a beat
+## of it finished with `done` of its places done. What the save is written on
+## (the plan's 6.2) - never `beat_done`, which fires mid-hold for the bar and
+## never for a row the bar does not count (a call, a back-in, a leave).
+signal place_changed(index: int, done: int)
 
 ## How big the things a step can aim at are, in metres, by the start of the
 ## target's name - so the HUD can size the arrow to its target instead of
@@ -45,6 +50,8 @@ const TARGET_RADIUS := {
 	"Joint": 0.70,
 	"Slab": 1.40,
 	"Machine": 0.80,
+	# A truck the child is backing in (the plan's 1.8): its tail.
+	"Back": 0.80,
 	"Pile": 0.70,
 }
 
@@ -193,9 +200,16 @@ func hold(on: bool) -> bool:
 	if finished or not waiting_for_hold():
 		held = false
 		return false
+	var was := held
 	held = on
 	if on and not busy:
 		_play_beat()
+	elif on and not was:
+		# A re-press on a paused HOLD takes the resting ring down, as a first
+		# press does (`_play_beat`): it was left hanging where a truck had stopped
+		# while the truck backed away (the session-5 verification pass). On the
+		# press EDGE only - the pads and the stick call this every frame.
+		update_arrow()
 	elif not on:
 		# A hold paused mid-beat gets its arrow back (the resting-hold branch).
 		update_arrow()
@@ -249,6 +263,7 @@ func _enter(i: int, animate: bool = true) -> void:
 		level.arm_rings(s, done_in_step)
 	_arm_button(s)
 	update_arrow()
+	place_changed.emit(index, done_in_step)
 	if s.kind == JobStep.Kind.AUTO or carry:
 		_play_beat()
 
@@ -340,6 +355,7 @@ func _play_beat() -> void:
 	# the arrow would leave it stuck over a thing nobody is being asked to tap.
 	_held_arrow = Vector3.INF
 	done_in_step = n
+	place_changed.emit(index, done_in_step)
 	if s.progress_weight > 0:
 		progress = job.weight_before(index, done_in_step)
 		beat_done.emit(progress)
@@ -498,8 +514,12 @@ func target_world() -> Vector3:
 		return level.rake_hint()
 	# A DRAG beat's arrow stands on the tool where the pull begins (the
 	# board's line, the sled, the bay), which the level knows.
+	# A truck waiting to be backed in: its tail, wherever it has rolled to (1.8).
+	if (s.verb == "back_dump" or s.verb == "back_mixer") and level != null and level.has_method("arrival_hint"):
+		return level.arrival_hint(s.target.get_slice(":", 1))
 	if level != null and level.has_method("drag_hint") \
-			and (s.verb == "screed_pull" or s.verb == "joint_cut" or s.verb == "broom_finish"):
+			and (s.verb == "screed_pull" or s.verb == "joint_cut" or s.verb == "broom_finish" \
+			or s.verb == "compact_base"):
 		var dh: Vector3 = level.drag_hint(s.verb)
 		if dh != Vector3.INF:
 			return dh
@@ -524,6 +544,9 @@ func target_radius() -> float:
 			return drive.panel_radius(int(bits[1]))
 	if drive != null and want.begins_with("Jack"):
 		return drive.spot_radius()
+	# The plate, not the whole base its step names.
+	if s.verb == "compact_base":
+		return 0.45
 	if want.find(":") >= 0:
 		want = want.get_slice(":", 0)
 	for prefix: String in TARGET_RADIUS:

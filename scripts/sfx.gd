@@ -43,7 +43,9 @@ const MUSIC_BUS := Settings.MUSIC_BUS
 ## The vehicle groups sit 9 dB under the tools since the fourth playtest
 ## ("vehicles too loud"): a diesel drone has far more power at the same peak
 ## than a sledge hit, and two of them ran under every machine beat.
-@export var group_gain_db: Dictionary = {"chop": 0.0, "thud": 0.0, "pop": -4.0, "whoosh": -6.0, "chipper": 0.5, "tada": 0.0, "thunk": 0.0, "creak": -3.0, "timber": 2.0, "bark": 0.0, "crackle": -9.0, "rain": -6.0, "sparkle": 0.0, "ping": -2.0, "flutter": -3.0, "dieselidle": -9.0, "mixerdrum": -9.0, "idle": -9.0, "drive": -12.0, "hydraulic": -5.0, "rubblepush": -4.0, "gravelpour": -4.0, "wetpour": -4.0, "horn": -4.0, "done": -4.0, "reversebeep": -6.0, "hiss": -6.0, "voice_hatchback": -4.0, "click": -6.0}
+## The homeowners' voices (6.1) are trimmed to the hatchback's heard level: the
+## loudest 100 ms of each take, averaged, set against its -8.2 dB (docs/sfx.md).
+@export var group_gain_db: Dictionary = {"chop": 0.0, "thud": 0.0, "pop": -4.0, "whoosh": -6.0, "chipper": 0.5, "tada": 0.0, "thunk": 0.0, "creak": -3.0, "timber": 2.0, "bark": 0.0, "crackle": -9.0, "rain": -6.0, "sparkle": 0.0, "ping": -2.0, "flutter": -3.0, "dieselidle": -9.0, "mixerdrum": -9.0, "idle": -9.0, "drive": -12.0, "hydraulic": -5.0, "rubblepush": -4.0, "gravelpour": -4.0, "wetpour": -4.0, "horn": -4.0, "done": -4.0, "reversebeep": -6.0, "hiss": -6.0, "voice_hatchback": -4.0, "voice_pickup": -6.5, "voice_van": -6.5, "voice_policecar": -5.0, "voice_taxi": -5.0, "voice_icecreamvan": -1.0, "click": -6.0}
 
 ## Name of the last group asked to play (clips or fallback). For tests.
 var last_played: String = ""

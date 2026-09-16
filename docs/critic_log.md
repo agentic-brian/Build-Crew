@@ -2089,3 +2089,707 @@ The frames, re-taken windowed at 1280x720 unless named, into
 
 **Green: `SITE_SMOKE PASS 332/332`, `MACHINE_PROBE PASS 16/16`
 (2026-09-15).**
+
+
+---
+
+# The improvement plan's fifth session: the user's decisions (2026-09-15)
+
+"Do next step in plan." The next step was the user's: section 11's decisions.
+Asked, the user KEPT the word "YAY!" (2), said YES to the arrival's last leg as
+a hold (4), YES to the kerb board after the base (5) and YES to the plate
+compactor (6); the name (7) stays open. Built: 1.8's held arrival, 5.1, 5.2 and
+5.3 (which needed no decision). A five-reader scouting pass mapped each item
+against the code first, and found the plan's "Today" stale again: 1.8's honk
+was built in session 2; 5.2's groups were cut by index, not by position; the
+form rows' first beat re-hung EVERY board, which a second `form_set` row would
+have turned into lifting the three boards already in; the stakes appeared on
+the kerb board from the first stake row on; and nothing could pose a stage past
+a row inserted before it, because stages were numbers. The job went from 18 rows
+and 74 stops to 25 rows and 83. The smoke went from 332 to 437/437 checks
+before the verification pass, the probe from 16 to 20.
+
+1. **Stages and `--step` name verbs now.** `SiteMain.STAGE_STEP` is `[verb,
+   nth]` looked up through `JobDef.index_of(verb, nth)`, `--step` takes a verb,
+   `verb:n` or a number, and `Driveway.pose_stage` compares stage NAMES; four
+   stages were added (`tipped`, `packed`, `kerbed`, `cured`) and `done` now means
+   after the strip. The smoke checks every stage lands on the verb it names.
+2. **The child backs the trucks in (1.8, decision 4).** Each truck's arrival is
+   two rows: the street leg (BUTTON), then a weight-0 HOLD (`back_dump`,
+   `back_mixer`) with the truck waiting in the road where the street leg stops
+   it, engine ticking over, beacon turning, the gold ring on its tail. A press
+   on the truck backs it in along the route it always took, only while the
+   finger holds, over `back_time` 4.5 s of holding with a `back_ramp` 0.25 s
+   gather and coast, the beeper only while it moves; lift and it stops where it
+   is (measured 0.000 m over 0.3 s after its coast), press again and it carries
+   on. A path walked by a finger needed `Machine.set_path`/`place_on_path`:
+   `follow` is a clock. The target is `Back:`, not `Machine:`, so a finger still
+   down at the stop does not start the tip under a moving camera (the carry rule
+   is by target string). A finger pressed on the mixer as it comes down the
+   street and kept down backs it in the moment it stops, already turned the way
+   it backs (-117.2 degrees, no pop). The mixer's chute comes out after the
+   back-in now. The skid steer still drives itself in forwards.
+3. **The plate compactor (5.1, decision 6).** A DRAG through `_scrub`, one beat
+   per bay (count 3, 6 stops), not `_hold`: the plan's own check - a still
+   finger packs only a plus sign - cannot be met by a hold. `Driveway` keeps a
+   packed value per base cell; a cell within `plate_radius` 0.78 of the plate
+   packs (0.78 is between a cell's along-drive neighbour, 0.75, and its
+   diagonal, 0.96); a packed cell's stones lie flat from their own tipped rest
+   pose, a ragged front rather than a tile at a time, and its bed - an overlay 2
+   mm over the base - goes a luma step paler (`GRAVEL_PACKED`, +14%, hue 0.004),
+   baked into the base and the overlay removed at the end so nothing is left to
+   fight the pour's front (whose colour now reads the base's). The rattle is a
+   shake FLOOR (the plan's 0.012 a frame never beats the decay), 4.9 mm while it
+   packs, gone on the lift; the head buzzes 6 mm under a still handle; the new
+   `platerattle` loop (ElevenLabs flow "Build Crew site sounds 4", one take of
+   four chosen by its envelope and spectrum) plays only while it packs. A new
+   GLB, `PlateCompactor.glb` - sole, exciter, engine, tool-orange cowl, a
+   two-tube handle rooted at the frame so it stretches to the hands. Measured:
+   the plus sign is exactly the plate's cell and its four neighbours, diagonals
+   0.00; every stone in the packed cell flat; a bay walked in about 11 s. The
+   eye went through four candidates (the frames, and the verification pass
+   below, moved it again).
+4. **The kerb board after the base (5.2, decision 5).** Which boards and pegs
+   are live is STATE: the kerb board once the base is packed
+   (`Driveway.form_live`), a peg once its own board is in (`stake_live`); the job
+   repeats `form_set` (3 then 1) and `stake_drive` (8 then 2). The boards wait in
+   the air over their places from the moment their row opens (`arm_rings`) and
+   no beat ever re-hangs one; the camera stays on the group just set
+   (`last_form_group`/`last_stake_group`, where "the last group by number" was
+   the kerb pair 9 m away). The tipper's leave waits until its body is off the
+   pad. The crossing now starts behind the kerb board's trench, so its pegs stand
+   in earth; the dirt floor reaches under the boards' slots. Measured: the kerb
+   board and its pegs were on site in 0 frames while the tipper was, and the
+   tipper's body really crossed the kerb end.
+5. **The child strips the forms (5.3).** A weight-0 AUTO cure row (`slab_cure`:
+   the cones across the mouth, the light to evening, the song down) and then a
+   TAP x3 row from a new `STRIP` eye holding all three boards, rings on all
+   three, a tap anywhere along a board counting (`SiteMain._board_under`, to its
+   line within a finger or `tap_reach_m`). Each board, as a pure function of k:
+   its pegs drawn up first, the board prised OUT a few degrees about its bottom
+   outside edge, lifted - the slab's clean face is drawn where it stood (0 to 18
+   skirt vertices on the kerb edge) - and carried to lie flat with its pegs on
+   it; only its own trench is backfilled. Nothing fades. The tada and the YAY!
+   moved to the last board, after the phase's hold (about 800 ms); the broom
+   gets the ordinary done note; the boards go at the cut to the street with the
+   kit. The cones moved out to `CONE_MOUTH_OUT` 0.40: their bases are 36 cm and
+   the crossing between the trench and the road is 28 cm, measured.
+
+**Green before the verification pass: `SITE_SMOKE PASS 437/437`,
+`MACHINE_PROBE PASS 20/20`.** Three earlier failures were the tests' own: a
+"lawn" point that projected onto the waiting truck, a rebar speed read off two
+samples a fraction of a millisecond apart, and then off 32-bit time samples
+matched exactly (it reads a least-squares slope over each 30 ms window now,
+after a later run also caught two-sample jitter reading 0.25 down, 0.26 up).
+
+### The improvement plan's fifth session: the verification pass
+
+Six reviewers - one per item, the harness and docs, and the honesty of the new
+smoke checks - each told to REFUTE it against the code, the frames and the
+smoke logs, and an independent skeptic on every medium or high finding
+(thirty-two agents). Twenty-three of twenty-six survived. What changed:
+
+1. **The tip lost its ring and mime when the finger was already up at the
+   stop.** A 0.3 s mute at the end of the back-in crossed into the next step,
+   and nothing re-armed a non-busy HOLD's arrow - GO and the keyboard never did.
+   The mute is gone; the smoke holds through the stop, never lifts, and wants
+   the tip's ring on the tailgate.
+2. **A re-press left the gold ring hanging in the road** while the truck backed
+   away: `JobRunner.hold` hid the arrow only on a FIRST press. The press edge on
+   a busy HOLD re-asks the arrow now.
+3. **Letting go did not stop the truck:** the tap's `hold_burst` ran on after a
+   real hold, about two metres at full speed before the coast. For the back-in
+   the burst is counted from the press (`_hold`'s `burst_from_press`); the smoke
+   measures the coast after the lift (under 0.08 of the path).
+4. **The carried press skipped the tap-on-target rule** (the honk's wider box).
+   It takes the same capped box as a press on the waiting truck.
+5. **A press on the plate's orange cowl never grabbed it.** It lands a metre
+   behind the plate on the base; it was accepted as a press and refused as a
+   grab, and a finger held on the cowl walked the plate away. One rule now for
+   both (`SiteMain.plate_under`: the drawn machine, or within its half-size plus
+   `tap_reach_m` on the base), held with the offset it was taken at. The smoke
+   presses the cowl with a real touch and drags it.
+6. **The handle stretched past its limit** at a bay's far row, four metres from
+   a fixed pair of hands. The eye walks after the plate between strokes now
+   (`PlateView`, like the screed's), the hands with it, and within one stroke
+   the plate goes no further from the hands than its handle reaches
+   (`SiteVerbs.PLATE_REACH` 2.8 m) - a smoke run caught a 1.2 m drag leaving the
+   grip on the frame's edge before that cap, measured off the drawn bar (the
+   Grip node's origin rides a handle-length short of it, and an earlier check
+   had been reading that).
+7. **The plate faded out in the held picture.** It goes back to the grass
+   upright, whole, with the rest of the kit; the smoke watches every frame for a
+   see-through surface.
+8. **The walk to the next bay drove the plate 3 m at the camera in 0.9 s**, its
+   handle re-aimed at the next bay on the first frame. It walks just over into
+   the next bay at plate speed, the eye with it.
+9. **A stick cursor outran the plate** and lost its grab; it is tied to the
+   plate and its bay.
+10. **A press along a waiting board away from its ring was a miss** (the kerb
+    board, the long boards): `_board_under` answers the form rows too. **A tap on
+    a board already coming off overwrote a kept tap** on another: a board in
+    flight is a mash, never a pick.
+11. **The stripped boards lay inside the footway**, and the kerb board swung
+    through the laid left board. There is nowhere beside a long board's own edge:
+    between the garage's front and the footway there are 7.9 m and a board is
+    9.16 m. They are carried to a crew's pile on the right lawn, side by side
+    (`Driveway.STRIP_PILE_X`), across first and then down; the smoke checks every
+    laid board against the footway's boxes and against each other.
+12. **The broom blinked out as the cure row opened** (every step put the tools
+    away). Past the job's last tool row the last tool stays on the grass until
+    the cut; posed `cured` and `done` show it there too.
+13. **Four checks proved less than they said:** the pegs "laid on the board"
+    passed for pegs left standing in the trench (now over the board, lying down,
+    on its top); the plate's idle-hint check passed with the hint broken (now the
+    resting ring on the plate); nothing checked the truck stayed where it was let
+    go (now the coast is bounded and never backwards); and no check pressed the
+    plate with a real finger.
+
+Not taken: the mixer still turns 27 degrees on the spot in the road before it
+backs (a truck cannot pivot; a short straight reverse first would fix it, and
+it predates the hold); the plate's last patches of a bay pack themselves as it
+leaves even where the plate never went (the 1.6 finish grammar every scrub
+has); the pegs fly on their own arc rather than riding their board; controller
+GO and `--tap` renders leave a ring over a board that has already gone (GO takes
+no ring - older than the session, every ring phase); the sledge's handle points
+up the drive on the kerb pegs, away from the road-side eye; the stage-verb
+smoke check re-reads the code's own table (a pose-against-play comparison would
+be stronger); a posed `--nomachine` cure skips the evening light.
+
+The frames, windowed at 1280x720 unless named, into `renders/critic/session5/`,
+each with its args (after `--path . --resolution <res> res://scenes/dev/shot.tscn
+-- --scene=res://scenes/site.tscn --out=<frame>.png`):
+
+| frame | args |
+|---|---|
+| `07a_tipper_waits_street_hud` | `--stage=staked --step=back_dump --shot=STREET --frames=70` |
+| `07b_tipper_backing` | `--stage=staked --step=back_dump --shot=STREET --hold --wait=1.2 --nohud --frames=70` |
+| `07c_tipper_waits_ipad_hud` (1024x768) | `--stage=staked --step=back_dump --shot=STREET --frames=70` |
+| `08a_plate_bay1_hud` | `--stage=tipped --shot=PLATE --frames=70` |
+| `08b_plate_plus_sign` | `--stage=tipped --shot=PLATE --hold --cursor=2.3,-1.525 --wait=2.0 --nohud --frames=70` |
+| `08c_plate_bay2_bay1_packed` | `--stage=tipped --shot=PLATE --done=1 --nohud --frames=70` |
+| `08d_plate_bay3` | `--stage=tipped --shot=PLATE --done=2 --nohud --frames=70` |
+| `08e_plate_ipad` (1024x768) | `--stage=tipped --shot=PLATE --nohud --frames=70` |
+| `08f_tipped_wide` | `--stage=tipped --shot=WIDE --nohud --frames=70` |
+| `08g_packed_wide` | `--stage=packed --shot=WIDE --nohud --frames=70` |
+| `09a_kerb_board_waiting_hud` | `--stage=packed --shot=FORM --frames=70` |
+| `09b_kerb_board_landing` | `--stage=packed --shot=FORM --tap --frames=2 --wait=0.4 --nohud` |
+| `09c_kerb_pegs_hud` | `--stage=kerbed --shot=STAKE --frames=70` |
+| `09d_kerb_peg_blow` | `--stage=kerbed --shot=STAKE --tap --frames=2 --wait=0.62 --nohud` |
+| `10a_bars_low_packed_hud` | `--stage=based --shot=BARS --frames=70` |
+| `10b_mixer_waits_street_hud` | `--stage=rebar --step=back_mixer --shot=STREET --frames=70` |
+| `10c_mixer_backing` | `--stage=rebar --step=back_mixer --shot=STREET --hold --wait=2.0 --nohud --frames=70` |
+| `11_pour_chute` | `--stage=rebar --step=pour_chute --shot=CHUTE --hold --wait=1.0 --nohud --frames=70` |
+| `17a_cured_strip_hud` | `--stage=cured --shot=STRIP --frames=70` |
+| `17b_strip_pull` | `--stage=cured --shot=STRIP --tap --frames=2 --wait=0.35 --nohud` |
+| `17c_strip_reveal` | `--stage=cured --shot=STRIP --tap --frames=2 --wait=1.0 --nohud` |
+| `17d_strip_laid` | `--stage=cured --shot=STRIP --tap --frames=2 --wait=2.0 --nohud` |
+| `17e_strip_kerb_board` | `--stage=cured --shot=STRIP --done=2 --tap --frames=2 --wait=1.3 --nohud` |
+| `17f_strip_ipad_hud` (1024x768) | `--stage=cured --shot=STRIP --frames=70` |
+| `18_done_wide` | `--stage=done --shot=WIDE --nohud --frames=70` |
+| `19_parked_payoff_hud` | `--stage=parked --shot=PAYOFF --frames=70` |
+
+**Green: `SITE_SMOKE PASS 446/446`, `MACHINE_PROBE PASS 20/20`
+(2026-09-15).**
+
+
+---
+
+# The improvement plan's sixth session: a different driveway, and a job that survives (2026-09-15)
+
+"Proceed with next section." The next section was Tier 6; its first two items
+stand alone and are cheap, so they were this session: 6.1, the second driveway
+is a different driveway, and 6.2, the job survives the app closing. A
+three-reader scouting pass mapped both against the code first and found the
+plan wrong in four places: the vehicles are not "the same Synty pack" but Car
+Garage's own Blender builds (which is why they may sit in this public repo),
+and three of the six are liveries with no paint to change; the driveway builds
+its panels in its OWN `_ready`, before the level's, so a seed set in the
+level's `_ready` would have changed the car and left every crack at the legacy
+drive; `beat_done` fires mid-hold and never for a call, a back-in or a leave,
+so a save written on it would never have saved half the rows; and a `done`
+count cannot rebuild the rows a child takes in any order - the plan's own
+check, "2 bars down" against `pose('based', rebar_lay, 2)`, passes only because
+the pose lays bars 1 and 2, while the smoke's child lays 3 and 1. No harness
+switched the save off either. Before a line changed, seven legacy frames were
+taken (`renders/critic/session6/baseline/`) and the old drive's crack, stain and
+weed transforms were hashed.
+
+1. **One seed per visit, one pure table** (`SiteLook`). Drawn from the seed,
+   each field off its own generator: the car (Hatchback, Pickup, Van in Car
+   Garage's paints less the Van's cream; PoliceCar, Taxi, IceCreamVan as
+   liveries), its voice, the house's `Equip_Trim` and the garage's walls (one
+   swatch of four), and the crack base. Seed 0 is the legacy lot; every harness
+   that names no seed gets it. Measured: the legacy hash is unchanged
+   (178 transforms, md5 546fc2e5...), the car parks at (2.6, 0, -1.0) as before, and the seven
+   baseline frames re-taken differ from the originals by a mean of 0.000 to 0.031 of 255 - the
+   same as two renders of today's code (a ring's pulse).
+2. **The seed is resolved in `SiteMain._enter_tree`**, before the driveway's
+   own `_ready`: NEXT's draw, then the save's, then `--seed`, then 0 for a
+   harness, then a fresh 1..9999. NEXT draws a visit whose car, house AND
+   cracks all differ from the one it follows; the number lives in process
+   memory only.
+3. **Crack bases are vetted, not free.** Forty candidates were built beside the
+   legacy site and held to its checks: twelve left a slab with fewer than three
+   weeds, and two more put a tuft on a later slab under the first slab's gold
+   (a check that looked only at the first slab passed them). Seven survivors
+   and 917 are the list, and the smoke builds a drive from every entry.
+4. **Six homeowners' cars, parked by the nose.** Four GLBs copied from Car
+   Garage with fresh imports. At the old fixed spot the 5.45 m pickup's nose
+   stood 32 cm inside the shut garage door; `Driveway.park_spot(nose_m)` keeps
+   every nose 0.385 m off the garage. Paint goes on a copy in the surface's
+   override: the imported material is cached across NEXT. The voices were
+   trimmed to the hatchback's heard level off the decoded clips (the pickup's
+   loudest 100 ms is 2.4 dB over the hatchback's; the ice-cream van's jingle
+   3 dB under).
+5. **The save** (`SaveGame`): `{version, job, rows, verb, nth, done, places,
+   seed}`, written on `JobRunner.place_changed` (a step entered, a beat
+   landed), to a `.part` and renamed over; deleted when the job is done and on
+   NEXT; `clear()` refuses while saving is off. A harness saves only into a
+   scratch file it named, a posed run never, and `shot.gd` switches it off.
+6. **The resume** (`resume_point`, `resume`): a row all done, or a row that
+   plays itself, resumes at the next row the child works; another job, another
+   row count, an unknown verb or no seed is a fresh driveway. The world is
+   posed as play leaves the row (`pose` with `play`: no tool posed mid-work, no
+   hidden truck at the pour, no blade down); a waiting truck's engine ticks
+   over; the rake's chute runs; the strip's song is down. The any-order places
+   are laid back by name while each is a legal pick. It opens on the WIDE,
+   except the pour, the come-along, the drags and the back-ins (the
+   verification pass). `--places=3,1` poses the same thing for
+   a frame.
+
+**New: `RESUME_PROBE`** - every row the child works, resumed at its start and
+one place before its end, held to the machine on site, the tool out, a ring on
+every open place, the bar's stop, the eye, the save on disk, and one move played
+from there; then the any-order places, a save no child could make, the saves that
+must be a fresh driveway, and the harness's isolation. **The smoke** now
+plays the legacy lot and pins it to the pre-change crack, vets every crack base
+and every car, reads the save off disk five times as the job plays, presses
+NEXT for real into a second driveway that must differ, takes the tablet away
+from that second job after its first bite and gives it back under a different
+`--seed`, compares the first job's save after bars 3 and 1, resumed on a drawn
+visit, with `--places=3,1` posed, and poses a painted visit's payoff and then
+the legacy lot after it.
+
+**Green before the verification pass: `SITE_SMOKE PASS 477/477`, `RESUME_PROBE
+PASS 314/314`, `MACHINE_PROBE PASS 20/20`.** The first smoke run was 475/477,
+both the test's own: it kept the rings' point array by reference, which the next
+re-arm rewrote, and the HUD bar's own step is 0.01, so a stop reads rounded. The
+frames found two faults no check could: the first sage swatch (0.80, 0.86, 0.74)
+went YELLOW in the payoff's evening light and put the yellow taxi on a yellow
+house, and the first slate was a warm grey nobody could tell from the legacy
+cream at any hour. All three swatches now lean cool and the slate is a value
+step darker (frames 23, 31).
+
+### The improvement plan's sixth session: the verification pass
+
+Five reviewers - the seeded visit, the save and its writer, the resumed world
+against play, the honesty of the new tests, the docs - each told to REFUTE its
+lens against the code, the logs and the frames, and an independent skeptic on
+every medium finding (thirteen agents; nobody ran Godot while the smoke ran).
+Twenty-four findings, eight of them medium; the skeptics confirmed six and
+called two coverage wishes rather than defects (both taken anyway). All but the
+four under "not taken" were fixed:
+
+1. **A resumed drag row or back-in opened on the WIDE.** A finger pressed during
+   the opening's 1.2 s swoop was read through the moving camera: a still finger
+   laid a wet streak, brushed lines, pulled the screed or walked the plate. The
+   waiting truck of a back-in was off the wide's picture with its idle running
+   and its ring over nothing. Resumed drags and back-ins open on their own shots
+   now, like the pour; a stick ends the opening as a finger does (it did not).
+2. **Mid-row, the hammer and the sledge lay on the lawn**, so the next blow flew
+   them a metre and a half in one frame - play only does that at a row's first
+   blow. They stand over the next place as their verb poses them.
+3. **The white police car and ice-cream van could draw the cream garage** - the
+   pairing the Van's cream paint was dropped for, on about one visit in twelve.
+   A livery row carries its body colour, and `SiteLook.stands_out` (a luma step,
+   or a saturated car on a pale wall) re-draws a house the car disappears
+   against. The smoke checks 3000 seeds by its own measure.
+4. **A failed write could replace a good save with an empty one:** a full disk
+   opens a file and loses the bytes at the close. The `.part` is read back whole
+   before the old save is removed; an old save that cannot be removed, or a
+   `clear()` that cannot remove a file, no longer leaves a stale one to resume.
+5. **A tap on the parked ice-cream van started its 2.5 s jingle four times over.**
+   The car's voice waits for itself now, the toots included.
+6. **Seven checks proved less than they said:** the probe resumed every row from
+   places it wrote itself, and checked the save's keys on its own document (a
+   sentinel now proves the resumed site wrote the save, and the key and time scan
+   reads a save the game wrote); its "one hold plays" passed a beat that bailed
+   and moved on (it must still be inside the resumed beat); ring counts, not ids;
+   a bar tolerance a whole stop wide; no stake resumed with places; the car's paint
+   was only ever checked on the unpainted hatchback, and the house's by a count
+   (a painted visit's payoff is posed and checked, then the legacy lot after it,
+   which must not have caught the colour); the parked spot was checked against
+   its own formula (seed 0 is pinned to the millimetre, the door measured off the
+   lintel); and pose against resume ran on seed 0 with the wrong tool (a drawn
+   visit now, the look, every tool, the bar and the stripped boards compared).
+7. **Docs:** `--paint` only works with `--car`; the save is written from the
+   first beat, not on the first step's entry; the legacy frames are identical to
+   their own ring pulse, not to the pixel; the crack-base comment's arithmetic;
+   and the jackhammer and push `--done` poses are new, not unchanged.
+
+The first smoke after these was 487/490, the three failures one new check's
+own: it measured the garage lintel with `_world_box`, which merges a node's
+CHILDREN, and the lintel is a mesh with none - its door face read z 0.
+
+Not taken: a relaunch after a finished job can draw the same car, house or
+cracks again (only NEXT knows the last look, and remembering it across a close
+would put another thing in a file); growing a look table re-draws that field
+for a saved seed, so an update can change a resumed drive's cracks under its
+spots (noted on the tables); the jointer and the broom lie on the lawn between
+beats of a resumed row; the police car's light bar and the taxi's sign stay dark
+while they toot.
+
+The frames, windowed at 1280x720 unless named, into `renders/critic/session6/`,
+each with its args (after `--path . --resolution <res> res://scenes/dev/shot.tscn
+-- --scene=res://scenes/site.tscn --out=<frame>.png`; the `50_` frames are a
+resumed site, taken by a scratch script that writes the save first):
+
+| frame | res | args | what it shows |
+|---|---|---|---|
+| `L1_old_wide` |  | `--stage=old --shot=WIDE --nohud --frames=70` | legacy, against baseline b1: mean 0.007 of 255 |
+| `L2_old_panel` |  | `--stage=old --shot=PANEL --nohud --frames=70` | legacy, against b2: mean 0.031 (the close rings' pulse) |
+| `L3_done_wide` |  | `--stage=done --shot=WIDE --nohud --frames=70` | legacy, against b3: identical |
+| `L4_parked_payoff_hud` |  | `--stage=parked --shot=PAYOFF --frames=70` | legacy, against b4: max 1 |
+| `L5_parked_payoff` |  | `--stage=parked --shot=PAYOFF --nohud --frames=70` | legacy, against b5: max 1 |
+| `L6_plate_bay2` |  | `--stage=tipped --shot=PLATE --done=1 --nohud --frames=70` | legacy, against b6: mean 0.006 |
+| `L7_rebar_bars` |  | `--stage=based --shot=BARS --nohud --frames=70` | legacy, against b7: mean 0.016 |
+| `20_payoff_pickup_s61` |  | `--stage=parked --shot=PAYOFF --seed=61 --frames=70` | Pickup, orange, sage house |
+| `21_payoff_van_s5` |  | `--stage=parked --shot=PAYOFF --seed=5 --nohud --frames=70` | Van, purple, duck-egg house |
+| `22_payoff_police_s11` |  | `--stage=parked --shot=PAYOFF --seed=11 --nohud --frames=70` | PoliceCar livery, slate house |
+| `23_payoff_taxi_s30` |  | `--stage=parked --shot=PAYOFF --seed=30 --nohud --frames=70` | Taxi on sage (the first sage went yellow here) |
+| `24_payoff_icecream_s10` |  | `--stage=parked --shot=PAYOFF --seed=10 --nohud --frames=70` | IceCreamVan, duck-egg |
+| `25_payoff_hatch_green_s1` |  | `--stage=parked --shot=PAYOFF --seed=1 --nohud --frames=70` | Hatchback in lime, slate |
+| `26_payoff_pickup_ipad_s28` | 1024x768 | `--stage=parked --shot=PAYOFF --seed=28 --frames=70` | Pickup, blue, iPad |
+| `27_parked_street_icecream_s3` |  | `--stage=parked --shot=STREET --seed=3 --nohud --frames=70` | the tallest car from the street |
+| `30_old_wide_s5` |  | `--stage=old --shot=WIDE --seed=5 --nohud --frames=70` | cracks 2358, duck-egg |
+| `31_old_wide_s11` |  | `--stage=old --shot=WIDE --seed=11 --nohud --frames=70` | cracks 3275, slate (the first grey read as the cream) |
+| `32_old_wide_s61_hud` |  | `--stage=old --shot=WIDE --seed=61 --frames=70` | cracks 1441, sage |
+| `33_old_panel_s5` |  | `--stage=old --shot=PANEL --seed=5 --nohud --frames=70` | a drawn drive's first slab close |
+| `34_done_wide_s30` |  | `--stage=done --shot=WIDE --seed=30 --nohud --frames=70` | sage at evening |
+| `35_done_wide_s5` |  | `--stage=done --shot=WIDE --seed=5 --nohud --frames=70` | duck-egg at evening |
+| `36_done_wide_s11` |  | `--stage=done --shot=WIDE --seed=11 --nohud --frames=70` | slate at evening |
+| `40_rebar_places_3_1` |  | `--stage=based --step=rebar_lay --done=2 --places=3,1 --shot=BARS --nohud --frames=70` | bars 3 and 1 by name |
+| `41_jack_places_3_2_hud` |  | `--stage=old --done=2 --places=3,2 --shot=PANEL --frames=70` | spots 3 and 2 by name, the hammer over spot 1 |
+| `50a_resume_rebar_opening_wide_s5` | | rebar_lay:1 done 2 places [1,3] seed 5, 30 frames | the opening wide of a resumed job |
+| `50b_resume_rebar_after_opening_s5` | | the same, +3.5 s | the eye down on the bars, 1 and 3 in |
+| `50c_resume_strip_s11` | | form_strip:1 done 2 places [1,3] seed 11, +3.5 s | two boards on the pile, one ring |
+| `50d_resume_pour_chute_s61` | | pour_chute:1 done 0 seed 61, 70 frames | straight onto the chute |
+| `50e_resume_back_dump_s30` | | back_dump:1 done 0 seed 30, +3.5 s | the tipper waiting in the road |
+| `50f_resume_push_lane2_s1` | | push_rubble:1 done 1 seed 1, +3.5 s | lined up on lane 2, blade down |
+
+**Green: `SITE_SMOKE PASS 490/490`, `RESUME_PROBE PASS 321/321`,
+`MACHINE_PROBE PASS 20/20` (2026-09-15).**
+
+
+---
+
+# The improvement plan's seventh session: the title row (2026-09-15)
+
+"Start next section." The next section was 6.3, the deferred port: a title row
+that is the job picker. Eight agents read it first - four scouts (the port
+source in car-fixer, this project's own boot and save wiring, the harness, and
+the seat's picture) and three designers arguing from the child, from the port
+and from the tests, with a judge merging them. The plan they produced is in the
+session scratchpad; what it changed about the obvious approach is worth keeping:
+
+- **The backdrop is `site.tscn` itself**, not a dressing scene extracted from
+  it. Car Garage has a `garage_dressing.tscn` and it is the cleaner end state,
+  but this project's posed states are split between `SiteMain` and `Driveway`,
+  and pulling them apart under a 4,300-line file that every session touches is
+  a refactor, not an item. A new `dress_only` export makes the level pose
+  itself and then stand still.
+- **The lot is posed FROM THE SAVE** (`dress_from_save`), so the same
+  `SiteMain` that would play the job is the one that judges whether it can be
+  resumed. The title can never offer to carry on a job the level would refuse,
+  and `resume_point` needed no static refactor.
+- **"Carry on / new drive" is TWO controls.** A tap on the job's disc is always
+  the safe thing; throwing a half-built drive away is a second, smaller disc,
+  held. In this game holding is how every piece of work is done - the
+  jackhammer, the plate, the screed, the truck backing in - so a hold that
+  destroys work must never sit on the big button a child reaches for first.
+- **No words at all**, which takes decision 7 (the name) off this item's
+  critical path: the name, the maker's mark, the trust ribbon, the splash and
+  the icons are one branding pass, 6.4.
+
+What shipped:
+
+1. **The app opens on `scenes/main.tscn`:** a `TitleMain` with one `StartMenu`
+   over it, and deliberately no camera and no `Sfx` of its own - the backdrop
+   brings both, and Godot makes the FIRST camera to enter the world current
+   whatever its `current` says.
+2. **Three backdrops, each honest.** Nothing saved: a freshly drawn visit's
+   cracked drive on the WIDE - it says what the job is and promises no reward
+   nobody earned. A job left behind: the child's own drive, at the row and the
+   places they left, posed the way PLAY leaves it rather than the way a
+   screenshot poses it. A job just finished: the new drive with the car on it,
+   in the payoff's evening light, because NEXT now leaves the finished visit's
+   seed (`LAST_SEED_META`) instead of drawing the next one.
+3. **One disc per job**, from `data/jobs/jobs.json` - a bare array of stems,
+   with no name, price, star, difficulty or "done" flag in it, because a flag
+   written back into that file is the first brick of an economy. The picture is
+   `MachineIcons.spec("skid")` itself, the skid steer wearing its push blade, so
+   the machine on the title is the machine that answers the call button. 250 px
+   on the left lawn, never over the drive it is a picture of.
+4. **The new drive is a held disc** (`HOLD_TIME` 0.9 s - 0.1's own number, and
+   the widget 0.1 will hang on the house), orange, in the bottom-RIGHT corner
+   because bottom-left is GO's and NEXT's and that corner keeps meaning "go on
+   with it". It is only on the screen when there is something to throw away. A
+   cream ring fills round it; let go early and the job is still there, and the
+   `pop` says so.
+5. **The backdrop is nobody's game.** `dress_only` makes `saves_on` false, takes
+   neither Engine meta, starts no music, connects no save writer, plays no beat,
+   answers no finger, and `_undress` takes the rings, the arrow, the HUD and the
+   tools off a posed lot - a picture behind a menu must not say "tap here".
+6. **The trip is tested through the real doors.** `title_probe` drives the row
+   with real touches pushed through the viewport, with the title as a child so a
+   press answers with `job_requested` and writes no meta;
+   `switch_probe` makes the whole journey through `change_scene_to_file` -
+   title, seat, job, NEXT, title, carry on - which is the one path every other
+   harness cannot reach, and is kept out of the ten-minute smoke because
+   repeated scene changes crash Godot 4.7.2 about one run in three.
+
+Measured: the title's first drawn frame is 0.93 s from launch, against 0.91 s
+for the site alone before this session - the backdrop is the only lot in the
+process, so the feared second build is not one. The legacy site frames re-taken
+through the new main scene are unmoved (`L1` mean 0.010 of 255, `L4` identical,
+`L6` mean 0.037 against its own 0.021 render-to-render rattle).
+
+**Green before the verification pass: `SITE_SMOKE PASS 491/491`, `TITLE_PROBE
+PASS 52/52`, `SWITCH_PROBE PASS 14/14`, `RESUME_PROBE PASS 321/321`,
+`MACHINE_PROBE PASS 20/20`.** The switch probe earned its place on its first
+run: it found that after the corner disc threw a drive away, the "new" drive it
+opened was the very one just binned - the backdrop's seed IS the saved visit's,
+and `_fresh_seed` handed it straight back.
+
+### The improvement plan's seventh session: the verification pass
+
+Five reviewers - the routing, the backdrop, the row itself, the honesty of the
+new tests, and the docs - each told to REFUTE its lens against the code, the
+logs and the frames, with an independent skeptic on every medium or high finding
+(thirty-seven agents). Thirty-eight findings; the skeptics confirmed nineteen
+and refuted thirteen. The two that mattered most could not have been found by
+looking at a picture:
+
+1. **A job left at the POUR armed four invisible steering pads, and one of them
+   sat exactly where the "new drive" disc stands.** `ToyHud._input` is a raw
+   `_input`, which a CanvasLayer's `visible` does not gate, and its pads answer
+   by `enabled`, not by being drawn - so the hidden right pad swallowed the
+   press, and the child could neither throw the drive away nor hear a miss. The
+   backdrop now takes no input at any level: the pads are shown empty, disabled,
+   and the HUD's own `_input` and `_unhandled_input` are turned off.
+2. **A job left at the COME-ALONG left the drum and the pour looping under the
+   menu** for as long as the title stood, over a picture in which nothing moves;
+   and the pour's own trick - the truck undrawn, the chute alone - was being
+   posed on a backdrop, so the row would have stood in front of a chute floating
+   in the road. The picture trick is now for pictures only (`not dress_only`),
+   and `_undress` stops every loop.
+3. **The backdrop ticked.** `_process` runs the pour's hold every frame from the
+   row it is posed on - a backdrop would have pressed its own beat with no
+   finger at all. A backdrop's `_process` is off.
+4. **The hold did not let go.** A finger that slid off the corner disc kept
+   filling the ring, because a `Button` never sees a touch DRAG; the menu
+   watches the finger itself now, and a drag off the disc is a release.
+5. **The press was silent.** The cut freed the `Sfx` in the same frame the
+   `crank` started, so the one press on the screen answered with nothing. The
+   cut waits `CUT_DELAY` 0.22 s - long enough for the kick and the clip, short
+   enough to still be a cut.
+6. **A second press cut twice**, consuming both metas; `_leave` is guarded now.
+   And a title whose lot failed to build cleared the child's save: it only
+   clears when the LEVEL itself refused it.
+7. **Five checks proved less than they said:** the switch probe never pressed
+   NEXT (it does now, through the handler the button calls - the payoff cut,
+   the finished-visit handoff and the parked backdrop are covered); "the lot
+   behind the disc is the lot you get" compared a value with itself; the row's
+   keys were compared against the code's own reader rather than the file; "a
+   finger never reaches the lot" was asserted where a press on the lot does
+   nothing anyway (it is asserted on the PARKED backdrop now, where a press
+   would toot the car); the corner disc's place was never measured; and the two
+   rows that leave something running were never posed at all. The probe also
+   stamped 1280x720 over every windowed run, so the iPad and phone layouts were
+   measuring the same shape three times - the engine eats `--resolution` before
+   a script can see it, so the probe keys off the display server instead.
+
+Not taken: the corner disc wears the jackhammer, the job's own first tool, which
+one reviewer called a trained gesture pointed at a destructive button - kept,
+because breaking the old drive up IS how a new one starts, and the hold, the
+colour and the corner all say it is not the work; a save left at a back-in shows
+the drive without the truck, which waits off the wide (a close-up behind a menu
+is worse); `carry_on` is decided once for the row, which only matters when there
+are two jobs (6.5); the corner disc has no drawn fallback if its model ever
+fails to load; and `SafeArea` ships without the layout probe its docstring
+names, which belongs with 6.4's safe-area pass.
+
+The frames, windowed, into `renders/critic/session7/`. The title takes two
+arguments of its own - `--seed=N` (which visit stands behind the row) and
+`--last` (show it as a drive just finished); a row with a job SAVED behind it
+needs a scratch script that writes the save first, as session 6's resumed frames
+did.
+
+| frame | res | args | what it shows |
+|---|---|---|---|
+| `60_title_cold_s5` | | `--scene=main.tscn --seed=5` | nothing saved: the cracked drive, one blue disc on the lawn |
+| `61_title_parked_s61` | | `--seed=61 --last` | the drive just finished, the pickup on it, evening |
+| `62_title_parked_s11` | | `--seed=11 --last` | another visit's reward behind the same disc |
+| `63_title_carryon_rebar_s5` | | a save at `rebar_lay` done 2 places 1,3 | the child's own half-built drive, both discs up |
+| `64_title_carryon_backdump_s30` | | a save at `back_dump` | the dug-out drive with the heap - the truck itself waits off the wide |
+| `65_title_ipad_s5` | 1024x768 | `--seed=5` | the 4:3 composition |
+| `66_title_phone_s5_last` | 1565x720 | `--seed=5 --last` | the wide phone composition |
+| `67_title_hold_half_s11` | | a save at `broom_finish`, a real finger held 0.55 s | the cream ring filling round the orange disc |
+| `68_title_carryon_ipad_s61` | 1024x768 | a save at `jack_spot` done 5 | a half-broken drive behind the row, on the iPad |
+| `L1_old_wide` `L4_parked_payoff_hud` `L6_plate_bay2` | | the session-6 args, `--scene=site.tscn` | the job's own pictures, unmoved by the main-scene change |
+
+**Green: `SITE_SMOKE PASS 491/491`, `TITLE_PROBE PASS 61/61`,
+`SWITCH_PROBE PASS 18/18`, `RESUME_PROBE PASS 321/321`,
+`MACHINE_PROBE PASS 20/20` (2026-09-15).**
+
+
+# The improvement plan's eighth session: the chrome a parent reaches for (2026-09-16)
+
+The plan's 6.4, the Kids-category chrome. Nothing in it is a toy: it is the cog,
+the sum in front of the policy, the notch, the accessibility switch, and the
+licence texts the bundle owes. None of it is for the child, and that is the
+whole design problem — **every one of these is the first thing in this game
+that shows words, and the child must never meet one.**
+
+## The name
+
+Asked, and answered by the person who owns it: **Build Crew**. Every doc, the
+repository and the Godot project already said it, and the word that matters is
+the second one — the crew is the child. The game's family name, Big Little Jobs,
+is the publisher's; the game's own name is Build Crew. That is decision 7 in the
+plan, and it closes the last open question in Tier 6.
+
+## The words rule
+
+The one rule this session wrote down, in `DESIGN.md` §7g, and the one every
+later session has to keep:
+
+> For the CHILD: none, ever. Words are allowed in exactly two places, both for
+> the adult: inside a control a child cannot operate (the gate's sum and its
+> prose), and on a label addressed to whoever opened a panel a child has no
+> reason to open (the panel's one string, "Privacy Policy"). **The typeface is
+> the signal**: Fredoka is the child's face, Nunito Sans is the adult's.
+
+Counted on the frames: the job shows **nothing** (frame 73), the panel shows two
+words in the adult's face, low contrast, in the corner (74), the gate shows a
+sum and a keypad (72). A child who presses the cog sees pictures — headphones, a
+slider, a quaver, a green tick — and one line of grey text they cannot read in a
+corner they have no reason to touch. The way out is the biggest thing on the
+screen and it is a tick, not a word.
+
+## What was built
+
+1. **The cog, on both screens.** `SettingsMenu` and `ParentalGate` came across
+   from Car Garage with exactly three edits, and the three are worth naming
+   because each is a bug that would have shipped:
+   - `set_sfx()`, because this game's `Sfx` is not the panel's sibling. On the
+     title row it belongs to the lot the screen instances, added after the
+     panel's `_ready` — a sibling lookup finds nothing, silently, forever, and
+     the volume slider sets a number over silence. The title pushes it in.
+   - `_release_pointers()` also calls `StartMenu.release_hold()`, because the
+     title row has a hold of its own and a hold that survives a pause is how a
+     child's saved job gets thrown away by a panel they opened.
+   - a comment at the sibling lookup, so the next port does not re-learn it.
+
+   The panel is the **last child** of both `main.tscn` and `site.tscn`: input is
+   delivered last-child-first, so the cog takes its own tap out from under a HUD
+   that would otherwise answer it.
+
+2. **What the pause really has to do.** It is not enough to freeze the picture.
+   Every finger that was down has to be **let go** — the runner's hold, the
+   level's `_touch_down`, the HUD's pads, the menu's ring — or a beat goes on
+   being held behind a panel nobody is touching. `site_main.gd`'s
+   `_notification` now treats `NOTIFICATION_PAUSED` exactly like a focus-out,
+   which is the same rule said once for the app being backgrounded and for the
+   panel being opened. The `Sfx` keeps its own clock
+   (`PROCESS_MODE_ALWAYS`), so the slider is heard while it is dragged.
+
+3. **The notch.** `SafeArea` gained the layout its own docstring promised in
+   session 7. Four `place_in_safe_area()` overrides — the job's HUD (house, bar,
+   and the four steering pads through a new `_pad_rect`), the site's own GO and
+   NEXT with the halo they are drawn with, the white mime's aim, and the title's
+   corner disc — each re-read when the viewport changes size, because a phone
+   rotates and a window resizes. `shot.gd` gained `--safe=iphone|ipad` so a
+   windowed frame shows a phone's layout and not a desktop's.
+
+4. **Reduce motion.** `Settings.motion_reduced()` reads the OS switch once;
+   `CameraShake` returns early from `shake()` and `hold_floor()`, and its
+   `_process` zeroes the trauma and **falls through** to the branch that puts the
+   basis back — a guard that returned early instead would leave the camera
+   holding the last tilt it was given. Every probe sets
+   `Settings.motion_override = -1` so none of them is at the mercy of the
+   machine it runs on.
+
+5. **The licences, and the repo.** `THIRD_PARTY_NOTICES.md` at the root, every
+   claim checked against the files rather than copied from a sibling: 33 models,
+   all built by scripts in this family, **not one carrying a texture** (every
+   glTF chunk parses with zero images); two OFL faces; 155 sound effects in 76
+   groups; one music track, named honestly as Tree Crew's forwarder carried
+   across (`md5 8c1a2eb0…`). `licenses/Godot-MIT.txt` and
+   `Godot-thirdparty.txt` are generated from the running engine by
+   `tools/make_engine_licenses.gd`, never hand-written, with the version on the
+   first line so a stale copy shows. And the sentence the public repository
+   rests on: **there is no Synty content in this project, and that is why this
+   repository is public.**
+
+## What the four new probes are for
+
+Not one of them proves the panel looks right. Each one proves a thing that would
+be invisible until a parent, or a reviewer, or an accessibility user found it.
+
+- **`SETTINGS_PROBE` (20)** — a real finger on the cog on both screens, the
+  eleven-rung slider driven by a touch PAIR (the emulated mouse and the touch,
+  both local: the one-finger-two-events bug lives on that path), the bus really
+  moving with it, and the assertion that matters most: with a hold running and a
+  finger down on the work, the cog opens and **both are let go**.
+- **`PRIVACY_PROBE` (29)** — is the published policy true of this build? Exactly
+  one `OS.shell_open` in the whole game, in the panel; no networking class ever
+  constructed; no device id and no wall clock read anywhere; the save's eight
+  keys pinned and every value scanned for anything shaped like a time; and
+  `SaveGame`'s `saved_at` erase exercised with a document that carries one.
+  Since 6.2 this game *does* write a save, so Car Garage's "nothing is written"
+  would have been a false assertion here — the replacement is stricter.
+- **`SAFE_AREA` (23, at each of two shapes)** — with no device standing in,
+  every control is **exactly** where it always was; with an iPhone 17 Pro's
+  Dynamic Island and home indicator, or an iPad's indicator, every control a
+  finger reaches for is inside the safe rectangle. It also says what it cannot
+  fix: the gold ring and the white arrow are 3D, no inset moves them, and a beat
+  whose ring lands in the outer band needs a camera, not a margin.
+- **`MOTION_PROBE` (10)** — the switch really stops the shake, and the camera it
+  stopped is not left tilted.
+
+Not taken: the cog sits in the child's reach on purpose — a parent's control
+hidden behind a gesture is a parent's control nobody finds, and what a child
+gets for pressing it is a frozen picture and a green tick; the panel dims the
+picture behind it, which is a fade, and the decided list says nothing fades —
+kept, because it is the one moment the game is deliberately not the toy; the
+motion switch is read once rather than watched, because a child does not change
+it mid-session and a watcher is a signal nobody fires.
+
+The frames, windowed, into `renders/critic/session8/`. Two new arguments:
+`--settings` (put the cog in the picture, which a shot otherwise hides),
+`--settings=open` / `=gate` (the panel, and the sum over it), and
+`--safe=iphone|ipad` (stand a device's hardware in front of the screen).
+
+| frame | res | args | what it shows |
+|---|---|---|---|
+| `70_cog_title` | | `--scene=main.tscn --settings` | the title row with the cog in its corner |
+| `71_panel_title` | | `--scene=main.tscn --settings=open` | the parent's panel over the row |
+| `72_gate_title` | | `--scene=main.tscn --settings=gate` | the sum a grown-up answers |
+| `73_cog_site` | | `--stage=rebar --settings` | the job, cog and all: no words anywhere |
+| `74_panel_site` | | `--stage=poured --settings=open` | the panel over a job, and the two words in the corner |
+| `75_phone_chrome` | 1565x720 | `--stage=rebar --settings --safe=iphone` | the Dynamic Island, and everything walked in off it |
+| `76_ipad_chrome` | 1280x960 | `--stage=rebar --settings --safe=ipad` | 4:3, no island, the home indicator only |
+| `77_phone_title` | 1565x720 | `--scene=main.tscn --settings=open --safe=iphone` | the panel at a phone's shape |
+| `78_phone_pads` | 1565x720 | `--step=pour_chute --shot=CHUTE --settings --safe=iphone` | the four steering pads and the chute, clear of the hardware |
+
+**Green: `SITE_SMOKE PASS 491/491`, `TITLE_PROBE PASS 62/62`,
+`SWITCH_PROBE PASS 18/18`, `RESUME_PROBE PASS 321/321`,
+`MACHINE_PROBE PASS 20/20`, `SETTINGS_PROBE PASS 20/20`,
+`PRIVACY_PROBE PASS 29/29`, `SAFE_AREA PASS 23/23` (iPhone and iPad),
+`MOTION_PROBE PASS 10/10` (2026-09-16).**
+
+Left for part 4, which is the only part of 6.4 still open: the export preset,
+the bundle id `com.biglittlejobs.buildcrew`, fifteen icon sizes, the splash, and
+the Build Crew rows on the site's own policy page.

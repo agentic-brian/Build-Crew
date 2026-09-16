@@ -34,17 +34,32 @@ func capture_base() -> void:
 
 
 func shake(amount: float) -> void:
+	# Nothing to answer for somebody who asked the OS to hold the picture still
+	# (6.4): the kick is the camera's, and only the camera's.
+	if Settings.motion_reduced():
+		return
 	_trauma = clampf(_trauma + amount, 0.0, 1.0)
 
 
-## Keeps the trauma at least `f` until called again with 0.
+## Keeps the trauma at least `f` until called again with 0. Guarded too: a
+## guard on `shake()` alone would leave the FLOOR rattling the picture for the
+## whole of a jackhammer bite and the whole of a plate drag.
 func hold_floor(f: float) -> void:
+	if Settings.motion_reduced():
+		return
 	_floor = clampf(f, 0.0, 1.0)
 
 
 func _process(delta: float) -> void:
 	if not _has_base:
 		capture_base()
+	if Settings.motion_reduced():
+		# Whatever was already in flight stops here - and FALLS THROUGH to the
+		# branch below, which puts the offsets and the basis back. Returning
+		# early instead would leave a camera caught mid-wobble tilted for good
+		# (`CameraRig` leaves the basis to this node on purpose).
+		_trauma = 0.0
+		_floor = 0.0
 	_trauma = maxf(_trauma, _floor)
 	if _trauma <= 0.0:
 		h_offset = 0.0

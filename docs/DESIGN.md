@@ -53,9 +53,11 @@ up the street to the right, +Z is toward the street (south), Y is up.** Metres.
   as slabs rather than as one painted rectangle.
 * The **forms** are three boards round the excavated pad plus an EXPANSION
   JOINT strip against the garage apron (there is nothing to stake a board to
-  there, and the new slab must not be tied to the old one), and EIGHT stakes,
+  there, and the new slab must not be tied to the old one), and TEN stakes,
   one blow of the sledge each, each left standing a stub above its board on the
-  outside - flush, ten of the child's stops left no mark on the picture.
+  outside - flush, ten of the child's stops left no mark on the picture. The
+  KERB board and its two stakes go in after the base is packed (section 7d):
+  both trucks back in through that end.
 * The **base** is a gravel bed the dump truck lays inside the forms as a
   WINDROW - full depth, growing along the drive from the garage out, which is
   what a tipper pulling forward really leaves behind it - with three hundred
@@ -98,7 +100,9 @@ numbers frame a panel at the kerb end and at the garage end.
 | `HAND` | from where the person doing it STANDS - head height at the kerb end, looking up the drive - with the tool in the near corner of the picture. The hose. |
 | `BROOM` | beside the BAY being brushed (one beat per concrete square between the joints), square to the drive: a stroke up and down the picture is a stroke across the drive, parallel to the joints, and the marks run the way the finger moved. |
 | `JOINT` | on the joint's own middle, behind it down the drive, holding the whole width: the groover is PULLED across by the finger from the near form to the far one, the groove following the sled, the handle in the child's hands. |
-| `STREET` | a vehicle arriving or leaving, fitted to the pair. |
+| `STREET` | a vehicle arriving or leaving, fitted to the pair - and the child backing a truck in from the road (7d). |
+| `PLATE` | the plate compactor: low, standing beyond the kerb edge of the BAY being packed, looking up the drive at the bays already done; still under the finger, it steps back to the next bay between beats. |
+| `STRIP` | all three form boards and the kerb at once, from the road off the drive's left kerb corner, for the child stripping them after the cure. |
 | `PAYOFF` | anchored to the slab, from the kerb corner 3.2 m up: the whole new drive with the car on it (over the first joint), the second joint, the garage and the house, in the evening light. The car's arrival is watched from `STREET` and the cut to `PAYOFF` comes as it turns in. |
 
 **Where to tap is shown with GOLD RINGS IN THE WORLD** (`SpotRings`, Tree Crew's
@@ -165,9 +169,11 @@ drive's LENGTH only and never turns.
 The nine phases the user asked for, as rows of data. `kind` is TAP / HOLD /
 BUTTON / AUTO; every HOLD runs only while the finger is down.
 
-Eighteen rows: the user's ten phases, the steel and the come-along (2026-09-14:
-"missing rebar"), plus the beats that fetch each machine and send it away.
-Seventy-four progress stops in all, weighted by the child's MINUTES rather than their taps (the improvement plan's 3.6, 2026-09-15: the holds and drags carry their share of the time, so the bar no longer reads three-quarters done at the mixer); a BUTTON or an AUTO beat is worth none,
+Twenty-five rows: the user's ten phases, the steel and the come-along
+(2026-09-14: "missing rebar"), the beats that fetch each machine and send it
+away, and since the plan's fifth session (2026-09-15) the child backing each
+truck in, the plate compactor, the kerb board after the base, the cure and the
+strip (section 7d). Eighty-three progress stops in all, weighted by the child's MINUTES rather than their taps (the improvement plan's 3.6, 2026-09-15: the holds and drags carry their share of the time, so the bar no longer reads three-quarters done at the mixer); a BUTTON or an AUTO beat is worth none,
 because pressing a button is not a child's work.
 
 | # | phase | kind | verb | tool | shot | stops |
@@ -177,15 +183,20 @@ because pressing a button is not a child's work.
 | 2 | call the skid steer | BUTTON | `call_skid` | — | `WIDE` | 0 |
 | 3 | push the rubble out | HOLD x2 | `push_rubble` | — | `MACHINE` | 4 |
 | 4 | it leaves | AUTO | `skid_leave` | — | `WIDE` | 0 |
-| 5 | forms go in | TAP x4 | `form_set` | — | `FORM` | 4 |
-| 6 | stakes driven | TAP x10 | `stake_drive` | sledge | `STAKE` | 10 |
+| 5 | forms go in (the long boards and the strip) | TAP x3 | `form_set` | — | `FORM` | 3 |
+| 6 | stakes driven (the long boards') | TAP x8 | `stake_drive` | sledge | `STAKE` | 8 |
 |   | *a PAIR at a time, both ringed, either order; the eye steps down the drive* | | | | | |
-| 7 | call the dump truck | BUTTON | `call_dump` | — | `WIDE` | 0 |
+| 7 | call the dump truck (it stops in the road) | BUTTON | `call_dump` | — | `WIDE` | 0 |
+| 7b | back it in | HOLD | `back_dump` | — | `STREET` | 0 |
 | 8 | lay the limestone base | HOLD | `tip_gravel` | — | `TIPPER` | 2 |
 | 9 | it leaves | AUTO | `dump_leave` | — | `WIDE` | 0 |
-| 9b | **the steel** | TAP x12 | `rebar_lay` | — | `BARS` | 12 |
+| 9a | **pack the base** | DRAG x3 | `compact_base` | plate compactor | `PLATE` | 6 |
+| 9b | close the form: the kerb board | TAP | `form_set` | — | `FORM` | 1 |
+| 9c | and its two pegs | TAP x2 | `stake_drive` | sledge | `STAKE` | 2 |
+| 9d | **the steel** | TAP x12 | `rebar_lay` | — | `BARS` | 12 |
 |   | *four long bars onto their chairs, any order; then the cross bars in pairs down the drive* | | | | | |
-| 10 | call the mixer | BUTTON | `call_mixer` | — | `WIDE` | 0 |
+| 10 | call the mixer (it stops in the road) | BUTTON | `call_mixer` | — | `WIDE` | 0 |
+| 10b | back it to the kerb; the chute comes out | HOLD | `back_mixer` | — | `STREET` | 0 |
 | 11 | **the pour** | HOLD | `pour_chute` | pads (all four) | `CHUTE` | 6 |
 | 11b | **pull it up** | SCRUB | `rake_pull` | come-along | `PULL` | 8 |
 | 12 | it leaves | AUTO | `mixer_leave` | — | `WIDE` | 0 |
@@ -193,6 +204,8 @@ because pressing a button is not a child's work.
 | 14 | drag the board down the drive | DRAG | `screed_pull` | screed board | `SURFACE` | 4 |
 | 15 | pull the joints across | DRAG x2 | `joint_cut` | jointer | `JOINT` | 2 |
 | 16 | broom finish, one bay at a time | DRAG x3 | `broom_finish` | broom | `BROOM` | 6 |
+| 17 | it cures: the cones across the mouth, the light to evening | AUTO | `slab_cure` | — | `WIDE` | 0 |
+| 18 | **strip the forms** | TAP x3 | `form_strip` | — | `STRIP` | 3 |
 
 ### 2b. The three shapes a beat can have (`SiteVerbs`)
 
@@ -200,7 +213,7 @@ because pressing a button is not a child's work.
 |---|---|---|
 | `_bite` | ONE tap, and the work runs to the end on its own | the hammer's three bites per panel, one blow per stake |
 | `_hold` | press and hold; the work flows while the finger is down and stands still when it lifts | the push, the tip, the screed, a joint |
-| `_scrub` | DRAG it over the slab; work only happens where the finger is, and the beat ends when the child has been everywhere | the come-along, the hose, the broom |
+| `_scrub` | DRAG it over the slab; work only happens where the finger is, and the beat ends when the child has been everywhere | the come-along, the hose, the broom, the plate compactor (on the base, 10 cm down) |
 
 A bite is a decision about WHERE — which is why the hammer and the sledge stopped
 being holds. What the child is being asked to get right there is the place, not
@@ -663,3 +676,263 @@ the contract:
   pop on in turn down it, each a `click` a step higher.
 - **The render harness takes no input** (`shot.gd`), and `--eye/--look` write an
   anchor's own offsets when it carries them.
+
+### 7d. The fifth session (2026-09-15): the user's decisions
+
+The user's answers to decisions 2 and 4-6 of the plan, built: 1.8's held
+arrival, 5.1, 5.2 and 5.3 (the log has the measurements). Decision 2 kept the
+word "YAY!". What it adds to the contract:
+
+- **A truck's arrival is two legs.** It comes down the street on its own and
+  STOPS in the road, tail to the drive, engine ticking over, beacon turning, a
+  gold ring on its tail - and waits. **Backing it in is the child's HOLD**
+  (`back_dump`, `back_mixer`): a press on the truck (its box, grown by a finger
+  but never more than `tap_reach_m`), and it backs in along its old route only
+  while the finger is down, gathering way and coming to rest over `back_ramp`
+  (a tap's `hold_burst` is counted from the press, so a real hold stops on the
+  lift), beeping only while it moves; a press elsewhere is a miss. A finger
+  that pressed the truck as it came down the street - by the same rule - and
+  stayed down backs it in the moment it stops. A re-press takes the ring off
+  the truck; the tip's ring is up the frame the truck stops. The skid steer still drives itself in forwards. The machine
+  walks the path by `Machine.set_path` / `place_on_path`, never by the clock.
+- **A finger still down when a truck stops does not start its work:** the back
+  rows' targets are `Back:`, not `Machine:`, so the tip and the pour want their
+  own press.
+- **The kerb board and its two pegs go in after the base** (decision 5), from
+  the road. Which boards and pegs are live is STATE (`Driveway.form_live`,
+  `stake_live`: the kerb board once the base is packed, a peg once its board is
+  in); the job repeats `form_set` and `stake_drive` with counts 3/8 then 1/2.
+  The boards wait in the air over their places from the moment their row opens,
+  and a beat never re-hangs a board already in.
+- **The crossing starts behind the kerb board's trench**, so its pegs stand in
+  earth; the cones' cure spot moved out with it (`SiteMain.CONE_MOUTH_OUT`).
+- **The base is packed with a plate compactor** (decision 6): a DRAG, one beat
+  per bay, the eye low behind the plate looking up the drive and walking after
+  it only between strokes (`PlateView`). The plate moves only under a finger ON
+  it - one rule for the press and the grab (`SiteMain.plate_under`: on the drawn
+  machine, or within its half-size plus `tap_reach_m` on the base), held with
+  the offset it was taken at, so a still finger is a still plate - no faster
+  than `plate_speed`, inside the forms and its bay. It packs every cell within
+  `plate_radius` - standing still it packs a plus sign and nothing more - and a
+  packed cell's stones lie flat and its bed goes a luma step paler
+  (`GRAVEL_PACKED`, +14%). The picture rattles and the `platerattle` loop runs
+  only while it packs. At the end the packed colour is baked into the base and
+  the overlay goes, and the plate goes back to the grass upright with the rest
+  of the kit, whole. Its handle runs off the bottom of the picture, aimed at the
+  PLATE pose, never at the live, rattling camera.
+- **The cure is a beat, and the child strips the forms after it** (5.3): the
+  cones across the mouth and the light to evening (`slab_cure`), then three
+  taps, one board each in any order, a tap anywhere on a board counting. Each
+  board's pegs are drawn, the board is prised OUT about its bottom outside edge
+  and lifted - the slab's clean edge is drawn where it stood - then carried
+  over the slab to the crew's pile on the right lawn and laid flat with its pegs
+  on it (a 9 m board has no room beside its own edge: the garage and the
+  footway are 7.9 m apart), and only its own trench is backfilled. Nothing
+  fades; the boards go at the cut to the street with the kit, and the broom
+  lies on the grass where it went back until then.
+- **The payoff, in this order, superseding 7b's:** the last board held; tada and
+  YAY! with the bar full, on the wide (`payoff_look`); the HUD gone; the cut to
+  the street with the kit and the boards cleared; the car in; its own voice,
+  twice; NEXT alone. The broom gets the ordinary done note.
+- **Stages and `--step` name verbs, never numbers** (`SiteMain.STAGE_STEP`,
+  `JobDef.index_of(verb, nth)`, `--step=pour_chute` or `--step=form_set:2`).
+  New stages: `tipped` (the plate), `packed` (the kerb board), `kerbed` (its
+  pegs), `cured` (the strip); `done` is after the strip now.
+
+### 7e. The sixth session (2026-09-15): a different driveway, and a job that survives
+
+Tier 6's first two items, 6.1 and 6.2 (the log has the measurements). What
+they add to the contract:
+
+- **One seed per visit** (`SiteMain.play_seed`), and the look drawn from it
+  by a pure table (`SiteLook.for_seed`, each field its own generator): the
+  homeowner's car - the Hatchback, Pickup and Van repainted from Car Garage's
+  own paints (less the Van's cream, which is the garage's colour), the
+  PoliceCar, Taxi and IceCreamVan as their liveries - and that car's own voice;
+  the house's wall paint (`Equip_Trim`) and the garage's walls, one swatch of
+  four for both (low chroma and leaning cool, since the payoff's evening light
+  warms them: no pink, no tool orange, no ring gold), never one the car does
+  not stand out from (`SiteLook.stands_out`: a luma step or a saturated car on
+  a pale wall - the white police car and ice-cream van never get the cream
+  garage); and the
+  old drive's crack, stain and weed generators (`Driveway.crack_base`, from a
+  list every entry of which the smoke builds and holds to the legacy drive's
+  checks). **Never drawn:** the job, its order, the panel count, the spots, the
+  settled slab, the chunks, the stones, the lot. The vehicles are Car Garage's
+  `tools/make_vehicles.py` builds (Equip_* materials, no textures), copied in
+  with their own imports.
+- **Seed 0 is the legacy lot**, to the number, and every harness that names no
+  seed plays it: every picture taken before this session is still the same
+  picture. `--seed=N` pins a visit; `--car=` (with `--paint=K`, that car's K-th
+  paint), `--house=` and `--cracks=` pin one field for a critic's frame.
+- **Where the seed comes from, in order:** the one NEXT drew (a different car,
+  house and cracks from the visit before, `SiteLook.draw_fresh`); the save's
+  (a resumed job keeps its drive under its stakes); `--seed`; 0 for any other
+  harness; a fresh draw of 1..9999 - never the clock, and never the
+  generator's own clock-seeded state. It is resolved in `SiteMain._enter_tree`:
+  the driveway child builds its panels in its own `_ready`, before the level's.
+- **A car parks by its nose** (`Driveway.park_spot(nose_m)`: the nose 0.385 m
+  off the garage, the hatchback's old gap), so the 5.45 m pickup stops short of
+  the shut door. Only cars that fit between the garage and the kerb are
+  homeowners'.
+- **A recolour is a copy in the surface's override**, matched by name prefix,
+  never a write into the imported material: that material is cached across NEXT.
+- **The job survives the app closing** (6.2). The save
+  (`user://build_crew_save.json`) is `{version, job, rows, verb, nth, done,
+  places, seed}` and nothing about when. From the first beat on it is written
+  every time a step is entered or a beat lands (`JobRunner.place_changed` -
+  never `beat_done`, which fires mid-hold and never for the rows the bar does
+  not count), to a `.part` that is read back whole before it is renamed over
+  the old save (a write that fails keeps the old one); it is deleted when the
+  job is done and on NEXT.
+- **A resume** (`SiteMain.resume_point`, `resume`) opens the row the child was
+  on with the places they had done. A save for another job, a job with a
+  different number of rows, a row the job has not got, or no seed, is a fresh
+  driveway. A row whose places were all done, or a row that plays itself (a
+  machine leaving, the cure), resumes at the next row the child works; past the
+  last row, a fresh driveway. The world is posed as PLAY leaves it when that
+  row opens (`pose(..., play = true)`: none of the picture's tricks); the places
+  a child takes in any order - the hammer's spots, boards, pegs, bars, stripped
+  boards - are restored by name wherever each is still a legal pick, and the
+  canonical ones otherwise; mid-row, the hammer or the sledge stands over the
+  next place as its verb poses it. **A HOLD resumes at its own start.** It opens
+  on the WIDE, as a fresh job does, except where a wide is wrong: the pour and
+  the come-along (the truck undrawn), every drag (a press during the eye's swoop
+  would move the work under a still finger) and the back-ins (the truck waits
+  off the wide's picture) open on their own shots.
+- **A harness never touches the child's save.** A run with `shot_args` reads and
+  writes one only if it pointed `SaveGame.path_override` at a scratch file; a
+  posed run never does; `shot.gd` and `pour_probe` switch saving off, and
+  `SaveGame.clear()` does nothing while it is off.
+- **`--done` poses:** every earlier `--done` picture poses the same canonical
+  places it did; the jackhammer and the push, which had no `--done` pose, have
+  one now; `--places=3,1` names which.
+- **Not restored, on purpose:** the held beats' partial work (a half-poured band,
+  a half-packed bay), where the plate stood in its bay, where the jointer and
+  the broom lay between beats, the child's own broom strokes (redrawn by rule),
+  and the pour's settled fill (the posed one).
+
+### 7f. The sixth session, part two (2026-09-15): the title row
+
+Tier 6's 6.3, the deferred port. What it adds to the contract:
+
+- **The app opens on `scenes/main.tscn`,** a `TitleMain` with one `StartMenu`
+  over it. NEXT and the house come back here (`SiteMain.TITLE_SCENE`); the
+  house is still off the screen until a job is finished (0.1 owns the button).
+- **The backdrop is the lot itself.** `scenes/site.tscn` is instanced as the
+  title's first child with `dress_only` set BEFORE `add_child` - a `SiteMain`
+  that poses itself and then stands there: no HUD, no rings, no tools, no
+  pads (a hidden pad still eats the touch over it), no music of its own, no
+  loops, no beats, no `_process` and no input. It READS the save, which is the
+  whole point of `dress_from_save` - but `saves_on` is false for it, so it can
+  never write one, and it takes neither of the two Engine metas. Which picture it poses is the screen's whole
+  honesty:
+  - nothing saved: a freshly drawn visit's CRACKED drive, on the WIDE. It says
+    what the job is and promises no reward that has not been earned.
+  - a job the child left: their own drive, posed from the save
+    (`dress_from_save` -> `resume_point`, then the row, the places and
+    `play = true`), so the title can never offer to carry on a job the level
+    would refuse.
+  - a job just finished: the drive with the car on it, in the payoff's evening
+    light (`SiteMain.LAST_SEED_META`, left by NEXT and taken once). The reward
+    is still standing behind the next choice.
+  There is no `Camera3D` and no `Sfx` in `main.tscn`: the backdrop brings both,
+  and Godot makes the FIRST camera to enter the world current whatever its
+  `current` says.
+- **One disc per job, from `data/jobs/jobs.json`** (a bare array of stems; a
+  key with no `.tres` behind it is dropped, never seated). The picture is that
+  job's own machine - the driveway's is `MachineIcons.spec("skid")` itself, the
+  skid steer wearing its push blade, so the title and the call button can never
+  drift apart. 250 px, on the left lawn (`ROW_ANCHOR` 0.70, `ROW_X` 0.30), never
+  over the drive it is a picture of. The file holds no name, price, star,
+  difficulty or "done" flag: there is nothing to buy, earn or unlock here.
+- **The tap is always the safe thing.** A press on a job's disc starts that
+  drive, or carries on the one the child left. THROWING A DRIVE AWAY IS A
+  SEPARATE CONTROL: a smaller orange disc with the jackhammer on it, in the
+  bottom-RIGHT corner (bottom-left is GO's and NEXT's, and that corner keeps
+  meaning "go on with it"), shown only when there is something to throw away,
+  and HELD for `StartMenu.HOLD_TIME` 0.9 s with a cream ring filling round it.
+  Let go early - or slide the finger off the disc - and nothing happens. In this game holding is how every piece of
+  work is done, so a hold that destroys work never goes on the big disc.
+- **What the press leaves behind:** `SiteMain.PICK_META` (the job, and whether
+  it is a carry-on) and, for a new drive, `NEXT_SEED_META`. Both are process
+  memory, never a file. The lot behind the disc IS the lot you get - except
+  when that lot is a reward already earned or a drive just thrown away, when
+  the next one is drawn to differ from it in car, house and cracks.
+- **Nothing fades and there are no words.** The menu is whole in the frame the
+  job arrives; the cut is the event, `TitleMain.CUT_DELAY` after the press, so
+  the disc's kick is seen and its sound heard before the scene (and the `Sfx`
+  playing it) goes. A seat press is `crank` (a diesel turning
+  over), the completed hold is `breaker`, a miss or an early release is `pop`.
+  The song restarts at each cut in both directions: keeping one alive across a
+  scene change needs an autoload this project does not have.
+- **A harness drives the row through the same doors:** with the title as a
+  child of a probe, `current_scene != self` and a press answers with
+  `job_requested(job, carry_on)` and writes NO meta.
+  `scenes/dev/title_probe.tscn` holds the row to all of the above;
+  `scenes/dev/switch_probe.tscn` makes the real trip (title, seat, job, NEXT,
+  title, carry on) through `change_scene_to_file`, which no other harness can
+  reach - and is kept out of the smoke, because repeated scene changes crash
+  Godot 4.7.2 about one run in three.
+
+### 7g. The seventh session (2026-09-16): the chrome a parent reaches for
+
+Item 6.4's parts 1, 2, 3, 5 and 7 (part 4, the export presets and icons, is
+what remains; part 6, the name, is answered - **Build Crew**). What they add to
+the contract:
+
+- **THE WORDS RULE, stated once.** For the CHILD: none, ever - the title row,
+  the job and the payoff carry no word at all. Words are allowed in exactly two
+  places, both for the adult: inside a control a child cannot operate (the
+  parental gate's sum and its prose) and on a label addressed to whoever opened
+  a panel a child has no reason to open (the panel's one string, "Privacy
+  Policy"). **The typeface is the signal**: Fredoka is the child's face, Nunito
+  Sans is the adult's. Everything else on the panel is drawn geometry - the cog,
+  the slider, two speakers, ear defenders, a quaver, a green tick - so a
+  three-year-old can open it, drag it and close it having read nothing.
+- **The settings cog is on BOTH screens**, top-left, 92 px at margin 18 (the
+  house button's own size and margin, so it reads as the same family). A
+  four-year-old learns one place once; and "the privacy link is reachable from
+  inside the app" cannot mean "reachable from the one screen a reviewer happened
+  to open".
+- **Opening it PAUSES, and lets go.** `get_tree().paused = true` is the only
+  thing that can stop a game whose every beat is a polled hold. With it: the
+  HUD's pads are released, the level's own fingers are dropped
+  (`NOTIFICATION_PAUSED` joins the focus-out arm), and the title row's HELD
+  "new drive" disc is let go (`StartMenu.release_hold`) - a frozen tree never
+  delivers a release, so that ring would have gone on filling after the panel
+  closed and thrown a saved job away. The `Sfx` keeps its own clock, so a
+  loudness control is never set over silence, while the machines' loops freeze
+  with the picture.
+- **The privacy link opens a sum, not a browser.** `ParentalGate`: two factors
+  of 3..9, re-rolled every time it is asked, twelve keys, a wrong answer clears
+  the slot. Apple's Kids rule is that the gate is arithmetic, never a
+  press-and-hold - which is also why the game's own destructive control (the
+  "new drive" disc) may be a hold: it destroys a drive, not a child's privacy.
+- **Every corner control keeps off the hardware.** `SafeArea` insets now move
+  the house, the bar, GO, NEXT, the four steering pads and the title's corner
+  disc, re-read whenever the viewport changes size. GO and NEXT are measured
+  WITH their halo, which is drawn and so is part of the control. What no inset
+  can move: the gold ring and the arrow the job points with are 3D, not
+  Controls - if a beat's ring lands in a phone's outer band, only that beat's
+  camera shot can fix it.
+- **Reduce-motion stops the CAMERA, and nothing else.**
+  `Settings.motion_reduced()` reads `DisplayServer.accessibility_should_reduce_animation()`
+  once (a harness decides it with `motion_override`), and it guards
+  `CameraShake.shake()`, `hold_floor()` AND the shake's own `_process` - a guard
+  on the kick alone would leave the floor rattling the picture through a whole
+  jackhammer bite. Still moving, deliberately: the slab's kick, the bit's
+  stroke, the camera's shot travel (the eye walks with the work), the gold
+  rings' pulse (that is WHERE TO TAP), and every answer to a finger. A toy that
+  stops answering is not accessible; it is broken.
+- **What ships with the bundle:** `THIRD_PARTY_NOTICES.md` and four licence
+  texts (`licenses/`), the two Godot ones generated from the running engine by
+  `tools/make_engine_licenses.gd`. They are files, never a screen: there is no
+  credits page in this family and there must not be one here.
+- **The tests:** `settings_probe` (the panel, by real touch pairs - a finger
+  reaches a Control twice), `privacy_probe` (the policy's claims, including the
+  save's `saved_at` erase, which nothing tested before), `safe_area_probe`
+  (both screens at 1565x720 and 1280x960, against Apple's documented insets)
+  and `motion_probe` (the camera stops, the world does not). Every probe sets
+  `Settings.motion_override = -1`: a test decided by the developer's own OS
+  settings is not a test.

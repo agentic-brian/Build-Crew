@@ -30,6 +30,20 @@ func _ready() -> void:
 			var kv := a.substr(2).split("=", true, 1)
 			extra[kv[0]] = kv[1] if kv.size() > 1 else true
 	Engine.set_meta("shot_args", extra)
+	# `--safe=iphone|ipad` stands a real device's hardware in front of the
+	# screen, so a windowed frame shows the phone's layout and not the desktop's
+	# (`SafeArea` reports nothing off a device). The numbers are the probe's.
+	if extra.has("safe"):
+		var frame := Vector2(get_viewport().get_visible_rect().size)
+		var ipad := str(extra["safe"]) == "ipad"
+		var win := Vector2i(2388, 1668) if ipad else Vector2i(2622, 1206)
+		var safe := Rect2i(0, 0, 2388, 1628) if ipad else Rect2i(186, 0, 2250, 1143)
+		SafeArea.probe_insets = SafeArea.insets_for(frame, win, safe)
+		SafeArea.probe_active = true
+	# Not the child's game: no save is read, written or deleted, and the child's
+	# settings file is left alone (`Settings.persists`). A picture taken on a dev
+	# machine with a job half done must not come out as that job (the plan's 6.2).
+	SaveGame.enabled = false
 	if _scene_path == "":
 		push_error("shot.gd: no --scene= given")
 		get_tree().quit(2)

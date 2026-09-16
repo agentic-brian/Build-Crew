@@ -6,7 +6,8 @@ against, so every round is the same critic.
 
 ## Who the critic is
 
-Five people watch one full New Driveway (and NEXT into a second one), then an
+Five people watch one full New Driveway (and NEXT into a second one, which must
+be a different driveway), then an
 editor merges what they said and throws out what is wrong or already planned:
 
 1. **A four-year-old** who cannot read. Where does the finger go? Did the tap
@@ -55,19 +56,25 @@ editor merges what they said and throws out what is wrong or already planned:
    godot --headless --path . --editor --quit          # class cache
    godot --headless --path . res://scenes/dev/machine_probe.tscn
    godot --headless --path . res://scenes/dev/site_smoke.tscn
+   godot --headless --path . res://scenes/dev/resume_probe.tscn
    ```
    then the phase shots into a dated folder under `renders/critic/`:
    ```
    godot --path . --resolution 1280x720 res://scenes/dev/shot.tscn -- \
      --scene=res://scenes/site.tscn --out=<abs>.png --frames=70 \
-     --stage=<old|broken|cleared|formed|staked|based|rebar|banded|poured|sprayed|screeded|jointed|done> \
-     --shot=<WIDE|PANEL|MACHINE|TIPPER|FORM|STAKE|BARS|CHUTE|PULL|SURFACE|HAND|JOINT|STREET|PAYOFF> [--nohud]
+     --stage=<old|broken|cleared|formed|staked|tipped|packed|kerbed|based|rebar|banded|poured|sprayed|screeded|jointed|cured|done|parked> \
+     --shot=<WIDE|PANEL|MACHINE|TIPPER|FORM|STAKE|PLATE|BARS|CHUTE|PULL|SURFACE|HAND|JOINT|BROOM|STRIP|STREET|PAYOFF> [--nohud] [--seed=N]
    ```
-   Take every stage in its own shot AND in WIDE, with and without the HUD.
+   Take every stage in its own shot AND in WIDE, with and without the HUD. With
+   no `--seed` a frame is the legacy lot; take the old WIDE and the PAYOFF at two
+   or three seeds as well (different cars, houses and cracks), since a visit is
+   drawn now.
 
-   Two arguments worth knowing. `--step=N` overrides which beat the runner is
+   Two arguments worth knowing. `--step=<verb>` (or `--step=form_set:2` for a
+   verb's second row, or a bare number) overrides which beat the runner is
    posed on, which is how you photograph a phase's CONTROLS (the pour's four
-   steering pads only exist while step 10 is the current one). `--nomachine`
+   steering pads only exist while `--step=pour_chute` is the current one; a
+   truck waiting to be backed in is `--step=back_dump`). `--nomachine`
    leaves the machines off-stage: the dump truck and the mixer park ON the
    driveway, so they hide the gravel base and the fresh concrete that are the
    whole point of those two phases.
@@ -91,9 +98,14 @@ eye can judge, and not re-derive those.
 
 ## Things already decided (do not re-litigate)
 
-- No person on screen; the tool is the hand, and the machines drive themselves.
+- No person on screen; the tool is the hand, and the machines drive themselves
+  - except the last leg of a truck's arrival, which the child backs in with a
+  held finger (the user's decision 4, 2026-09-15).
 - The phase ORDER is the user's: break, push out, forms, stakes, base, pour,
-  water, screed, joints, broom. Water before the screed is deliberate.
+  water, screed, joints, broom. Water before the screed is deliberate. Since
+  2026-09-15 (the user's decisions 5 and 6) the kerb board and its two stakes
+  go in after the base, the base is packed with a plate compactor before them,
+  and the child strips the forms after the cure.
 - Since 2026-09-14 the mixer STAYS ON THE ROAD with an extension chute clipped
   on, fills the kerb end of the form, and the child pulls the rest up with a
   come-along (DESIGN 2a, 2d). It never drives on the steel. The pour in two
@@ -143,5 +155,41 @@ eye can judge, and not re-derive those.
   long bars are seen from low (a chair is a leg), and a waiting LONG bar is
   barely lifted and swings inward; a bar's landing is one gravity - fall,
   clang, two bounces, then the ties pop on down it.
-- No title screen, settings or privacy gate in the prototype — they are ported
-  from Car Garage when this stops being a prototype.
+- Since the plan's fifth session (2026-09-15): a truck stops in the road and
+  the child backs it in, beeping only while it moves; the plate compactor is a
+  DRAG per bay, packing a plus sign under a still finger, the packed base a luma
+  step paler with its stones flat; the kerb board and its pegs are live only once
+  the base is packed (state, not a count), and its pegs stand in earth; the cure
+  is a beat and the three boards are stripped by the child, carried to a pile on
+  the right lawn and carried off at the cut; the tada answers the last board; the word YAY! stays
+  (decision 2). Stages and `--step` name verbs, never numbers.
+- Since the plan's sixth session (2026-09-15): the second driveway is a
+  DIFFERENT driveway - the homeowner's car (six, in their own paint and voice),
+  the house and garage walls and the old drive's cracks are drawn per visit, and
+  NEXT never repeats the car, the house or the cracks; the job, its order, the
+  panel count, the spots and the lot never change; no car parks in front of a
+  garage it disappears against. Seed 0 is the legacy lot every
+  earlier picture shows. Closing the app loses nothing: the job comes back at
+  the row and the places the child left, a held beat at its start, and the save
+  holds no time.
+- Since 2026-09-16 (6.4): there is a SETTINGS COG, top-left, on both screens -
+  the one control a parent reaches for. It pauses what is under it, lets go of
+  every finger that was down, and carries an eleven-step loudness slider, a
+  music toggle and a privacy link behind an arithmetic gate. THE WORDS RULE:
+  none for the child, ever; words are allowed only inside a control a child
+  cannot operate (the gate) or on a label addressed to the adult who opened a
+  panel a child has no reason to open (the privacy link) - and the typeface is
+  the signal, Fredoka for the child, Nunito Sans for the adult. Every corner
+  control keeps off the hardware's own insets, and a child whose OS asks for
+  less motion gets a camera that never shakes, with everything they touch still
+  moving.
+- Since the plan's sixth session, part two (2026-09-15): THERE IS A TITLE ROW,
+  and it is the job picker (6.3). The app opens on it, NEXT and the house come
+  back to it, and the lot itself is what stands behind it - a fresh cracked
+  drive, the drive the child left, or the drive they just finished with the car
+  on it. One big disc per job, carrying that job's own machine; no words, no
+  fade, no second page, no locked seats. The TAP is always the safe thing (it
+  starts or carries on); throwing a half-built drive away is a smaller disc in
+  the other corner, HELD for 0.9 s with a ring filling round it. Settings, the
+  privacy gate, the brand, the splash and the icons are still to come, from Car
+  Garage, in 6.4.
