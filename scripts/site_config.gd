@@ -123,20 +123,22 @@ extends Resource
 @export_range(0.2, 2.0, 0.05) var form_drop_height: float = 0.40
 ## Seconds ONE blow of the sledge takes, which is what puts one stake in. Ten
 ## stakes, ten taps: "one hammer hit per stake".
-@export_range(0.2, 2.0, 0.05) var stake_time: float = 0.70
+@export_range(0.2, 2.0, 0.05) var stake_time: float = 0.95
 ## How far the sledge's head rises, metres - the wind-up it WAITS at, held over
 ## the peg from the moment the row opens, which is what says "hit this one".
+## Raised at the playtest of 2026-09-16 with `stake_time` and `sledge_strike`:
+## the blow wanted the weight of a real swing, not a quick press down.
 ## Swung, not lifted: the head travels on the handle's arc, so this is the
 ## height it reaches and the angle follows from the handle's measured length.
-@export_range(0.05, 1.2, 0.01) var sledge_lift: float = 0.40
+@export_range(0.05, 1.2, 0.01) var sledge_lift: float = 0.52
 ## Where in `stake_time` the face meets the cap: the swing DOWN before it, the
 ## peg going in after it. The blow now starts in the frame the child taps - the
 ## hammer is already up - so this is how long they wait to hear it. It used to
 ## be 0.60 s, because the tool flew in from the lawn first.
-@export_range(0.1, 0.8, 0.01) var sledge_strike: float = 0.35
+@export_range(0.1, 0.8, 0.01) var sledge_strike: float = 0.55
 ## 0.38, not 0.08 (the plan's 1.4): squared, 0.08 was under two millimetres of
 ## picture for a sledge blow the child caused. Gone again in a quarter second.
-@export_range(0.0, 0.6, 0.01) var shake_stake: float = 0.38
+@export_range(0.0, 0.6, 0.01) var shake_stake: float = 0.52
 
 @export_group("The rebar (phase 5b)")
 ## Seconds a bar takes to drop onto its chairs, and how high it waits over its
@@ -180,7 +182,12 @@ extends Resource
 ## along the pad it creeps while it pours (a truck lays a windrow, it does
 ## not drop one heap).
 @export_range(1.0, 8.0, 0.1) var truck_back_time: float = 3.4
-@export_range(0.0, 8.0, 0.1) var tip_crawl: float = 5.2
+## How far the truck creeps PAST the end of the form while it tips. The creep
+## itself is no longer a feel number: it is the distance the TAILGATE has to
+## cover to lay the whole windrow, read off the slab. A colour front that
+## outruns the gate is exactly what the child sees ("its doing it faster than
+## the truck is pouring rock", the playtest of 2026-09-16).
+@export_range(0.0, 3.0, 0.1) var tip_crawl: float = 0.0
 ## How many stones a second come off the tailgate while it pours, and how big
 ## one is.
 @export_range(10, 400) var gravel_rate: int = 150
@@ -286,6 +293,8 @@ extends Resource
 ## `pour_time`, and the rake has to keep up with it, not the other way round.
 @export_range(0.01, 1.5, 0.005) var rake_rate: float = 0.60
 @export_range(0.2, 1.6, 0.05) var rake_radius: float = 0.62
+## How full a cell has to be drawn before it reads as "done" - kept only for the
+## chute's own heap, since the rake fills a square outright now (2026-09-16).
 ## How far a stroke reaches toward the kerb, in cells of the slab (0.75 m each):
 ## a rake's pull is about a metre and a half, so the concrete has to be brought up
 ## the form a stroke at a time from where the chute leaves it.
@@ -327,6 +336,10 @@ extends Resource
 ## soaks fast, the broom takes a little longer because it is the last thing done.
 @export_range(0.2, 8.0, 0.1) var water_rate: float = 6.0
 @export_range(0.2, 8.0, 0.1) var broom_rate: float = 4.5
+## Where the child's hands are in the BROOM picture, off the eye: right, down,
+## and FORWARD. Further forward than the rake's 0.55 so the stretched handle
+## between the hands and the brush stays a broom and not a pole.
+@export var broom_hold: Vector3 = Vector3(0.20, -0.62, 1.05)
 ## How much of the slab has to be covered before the beat is finished. Not 1.0:
 ## the last half of one cell in a corner is not worth asking a four-year-old for.
 ## 0.85: the last stripe in a corner is not worth asking a four-year-old for
@@ -482,6 +495,14 @@ extends Resource
 ## seconds instead of lurching when the finger lands and lifts; 4.5 s, not the
 ## 3.85 the leg took on its own, because "they are slow moving large trucks".
 @export_range(1.0, 12.0, 0.1) var street_time: float = 3.15
+## The beat a truck sits still between arriving in the road and starting to
+## reverse - the set-up stop a driver really makes. Without it the truck
+## arrives and reverses in one unbroken slide, which is the "turn around and
+## back up" the playtest called unnatural.
+@export_range(0.0, 2.0, 0.05) var back_pause: float = 0.55
+## The last correction of the manoeuvre: a steered vehicle lags its route, so it
+## squares itself up over these seconds as it comes to rest.
+@export_range(0.0, 1.5, 0.05) var back_settle: float = 0.45
 @export_range(1.0, 12.0, 0.1) var back_time: float = 4.5
 @export_range(0.0, 1.5, 0.05) var back_ramp: float = 0.25
 ## Seconds it takes to leave again.

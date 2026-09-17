@@ -22,6 +22,11 @@ extends Node
 const SCRATCH := "user://switch_probe_save.json"
 const FRAME_CAP := 4000
 
+## How many rows the job really has. Never a literal: the day the job's row count
+## changed, a typed one made every save in this suite be refused, and a refused
+## save is a QUIET failure - the level simply starts fresh.
+var _rows: int = JobDef.rows_of("new_driveway")
+
 var _checks: int = 0
 var _failures: int = 0
 
@@ -97,7 +102,7 @@ func _run() -> void:
 	_check(not SaveGame.exists(), "with no half-built job left over")
 	# 5. Back to a title with the job unfinished: it offers to carry on. (The
 	# save was cleared by NEXT, so it is written again here.)
-	SaveGame.save_data({"job": "new_driveway", "rows": 25, "verb": "jack_spot", "nth": 1,
+	SaveGame.save_data({"job": "new_driveway", "rows": _rows, "verb": "jack_spot", "nth": 1,
 		"done": 1, "places": [id], "seed": saved_seed})
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 	await _settled()

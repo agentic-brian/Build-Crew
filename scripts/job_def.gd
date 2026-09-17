@@ -25,6 +25,16 @@ extends Resource
 @export var slab: SlabSpec = null
 
 
+## How many rows a job has, by file name - for the harnesses, which have to write
+## a save document a level will accept and must never type the number.
+static func rows_of(job_name: String) -> int:
+	var path := "res://data/jobs/%s.tres" % job_name
+	if not ResourceLoader.exists(path):
+		return 0
+	var j := load(path) as JobDef
+	return j.steps.size() if j != null else 0
+
+
 ## This job's rectangle, or the driveway's if it names none. Never null, because
 ## the caller pushes it UNCONDITIONALLY: a level that skipped the push would
 ## inherit the shape of whatever level stood in this process before it.

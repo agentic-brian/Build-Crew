@@ -18,6 +18,14 @@ extends Node
 const SCRATCH := "user://resume_probe_save.json"
 const FRAME_CAP := 6000
 
+## How many rows the job really has, read from the job itself when the probe
+## starts. It was the literal 25, and the day the job became 22 rows every
+## resume in this suite was refused on the row-count line - which does not FAIL
+## loudly, it just makes each `_until` run to `FRAME_CAP` and the whole probe
+## take twenty minutes. A test that goes quiet instead of red is worse than one
+## that goes red.
+var _rows: int = 25
+
 var _checks: int = 0
 var _failures: int = 0
 var _packed: PackedScene
@@ -38,6 +46,7 @@ func _run() -> void:
 	SaveGame.path_override = SCRATCH
 	SaveGame.clear()
 	var job := load("res://data/jobs/new_driveway.tres") as JobDef
+	_rows = job.steps.size()
 	await _every_row(job)
 	await _any_order()
 	await _refused(job)
@@ -83,8 +92,8 @@ func _resume_row(job: JobDef, i: int, nth: int, done: int) -> void:
 		"%s: and the bar at their stops (%d of %d, bar %.3f)" % [tag, runner.progress, job.total_weight(), main.hud.step_value()])
 	_check(main.play_seed == 2096 and main.seed_from == "save", "%s: on the saved visit's look (seed %d from %s)" % [tag, main.play_seed, main.seed_from])
 	# Which machine is on site, as play has it when this row opens.
-	var want: String = {"push_rubble": "SkidSteer", "back_dump": "DumpTruck", "tip_gravel": "DumpTruck",
-		"back_mixer": "ConcreteTruck", "pour_chute": "ConcreteTruck", "rake_pull": "ConcreteTruck"}.get(s.verb, "")
+	var want: String = {"push_rubble": "SkidSteer", "tip_gravel": "DumpTruck",
+		"rake_pull": "ConcreteTruck"}.get(s.verb, "")
 	var shown: Array[String] = []
 	for kind: String in ["SkidSteer", "DumpTruck", "ConcreteTruck"]:
 		var m := main.machine(kind)
@@ -110,7 +119,7 @@ func _resume_row(job: JobDef, i: int, nth: int, done: int) -> void:
 		_check(rings.count() > 0 and ring_ids == open_ids and on_done == 0,
 			"%s: a ring on each place still open and none on a done one (%s, open %s)" % [tag, str(ring_ids), str(open_ids)])
 		_check(main.done_places(i).size() == done, "%s: and %d places done in the world (%s)" % [tag, done, str(main.done_places(i))])
-	if s.verb == "pour_chute" or SiteVerbs.SCRUB_VERBS.has(s.verb) or SiteVerbs.BACK_VERBS.has(s.verb):
+	if SiteVerbs.SCRUB_VERBS.has(s.verb):
 		_check(main.rig.current_shot() == s.shot and not main._opening,
 			"%s: opens on its own shot - no chute in the road, no drag under a moving eye, no truck off the picture (%s)" % [tag, main.rig.current_shot()])
 	else:
@@ -137,13 +146,14 @@ func _resume_row(job: JobDef, i: int, nth: int, done: int) -> void:
 			_check(lane1 > 0 and off_pad == (lane1 if done >= 1 else 0) and main.drive.chunks_on_pad() > 0,
 				"%s: lane 1's rubble %s (%d of %d off the pad), lane 2's still on it" % [tag, "on the heap" if done >= 1 else "on the pad", off_pad, lane1])
 			_check(main.garage_door_k() > 0.99, "%s: the garage door up" % tag)
-		"back_dump", "back_mixer":
-			_check(main.sfx.is_looping("arrive"), "%s: its engine ticking over in the road" % tag)
-		"pour_chute":
-			# Three frames in, the chute is already running (its pads are held from
-			# the row's first frame): a band from empty, not the one left behind.
-			_check(main.drive.fill_fraction() < 0.05, "%s: the pour starts again from an empty form (%.3f)" % [tag, main.drive.fill_fraction()])
 		"rake_pull":
+			# The form starts EMPTY, not with the band the last run left behind.
+			# Not zero: the chute has laid its own short heap at the kerb end by
+			# the time the child picks the rake up. But the FORM is the child's
+			# to fill, so almost all of it has to be bare.
+			_check(main.drive.covered_fraction() < 0.20,
+				"%s: the spread starts on a form the child still has to fill (%.3f covered)"
+				% [tag, main.drive.covered_fraction()])
 			_check(main.sfx.is_looping("mixer") and main.sfx.is_looping("concrete"), "%s: the drum and the chute running" % tag)
 		"jack_spot":
 			if done > 0:
@@ -263,7 +273,7 @@ func _refused(job: JobDef) -> void:
 	var fresh := {
 		"the last board stripped (the payoff)": _doc("form_strip", 1, 3, [1, 2, 3], 5),
 		"another job": _with(_doc("jack_spot", 1, 1, [1], 5), "job", "patio"),
-		"a job with a row added since": _with(_doc("jack_spot", 1, 1, [1], 5), "rows", 26.0),
+		"a job with a row added since": _with(_doc("jack_spot", 1, 1, [1], 5), "rows", float(_rows + 1)),
 		"a verb the job has not got": _with(_doc("jack_spot", 1, 1, [1], 5), "verb", "edger"),
 		"no seed": _with(_doc("jack_spot", 1, 1, [1], 5), "seed", null),
 		"a seed that is a string": _with(_doc("jack_spot", 1, 1, [1], 5), "seed", "7"),
@@ -346,14 +356,15 @@ func _privacy(doc: Variant, what: String) -> void:
 		if (d[k] is float) and float(d[k]) >= 1e5:
 			timey += 1
 	_check(keys == ["done", "job", "nth", "places", "rows", "seed", "verb", "version"] and timey == 0
-		and String(d.get("job", "")) == "new_driveway" and int(d.get("rows", 0)) == 25,
+		and String(d.get("job", "")) == "new_driveway" and int(d.get("rows", 0)) == _rows,
 		"%s: exactly its eight keys, and nothing in it is a time (%s, %d)" % [what, str(keys), timey])
 
 
 # --- Plumbing ------------------------------------------------------------------------------------
 
 func _doc(verb: String, nth: int, done: int, places: Array, seed: int) -> Dictionary:
-	return {"job": "new_driveway", "rows": 25, "verb": verb, "nth": nth, "done": done, "places": places, "seed": seed}
+	return {"job": "new_driveway", "rows": _rows, "verb": verb, "nth": nth, "done": done,
+		"places": places, "seed": seed}
 
 
 func _with(d: Dictionary, key: String, value: Variant) -> Dictionary:

@@ -1070,3 +1070,63 @@ the contract:
   looked at. The store becomes `version` 2 with a `jobs` map keyed by job name;
   the current single-job document migrates into it. Not built yet - it is the
   next session's first work, deliberately before any flag data exists to need it.
+
+### 7k. The playtest of 2026-09-16, evening: nine notes
+
+Two of them take back decisions the user made before they had played, which is
+what a playtest is for. Both are recorded as reversals rather than quietly
+dropped.
+
+- **No chute controls** (note 5, reversing decision 1). The pour's four steering
+  pads are gone, and with them the only control scheme in a job where every
+  other beat is a tap, a hold on the picture or a drag - a finger on the picture
+  during that beat used to be answered by a pad being kicked in the corner,
+  which is the opposite of the decided list's "a tap is answered by the thing
+  under it". The mixer backs in and pours by itself; the child goes straight to
+  spreading. `SiteVerbs.PAD_VERBS` is empty (the HUD keeps the machinery, so the
+  safe-area probe can still measure pads) and the `Step_pour` row is deleted.
+- **No finger on a reversing truck** (note 9, reversing decision 4 and the
+  plan's 1.8). "Backing trucks up with your finger doesn't feel good." Both
+  weight-0 HOLD rows are gone; a truck comes down the street, STOPS the way a
+  driver does before a manoeuvre (`back_pause`), backs itself in beeping, and
+  straightens up as it comes to rest (`back_settle`). The arrival is still one
+  busy BUTTON step, so a tap on the moving truck is still answered by its horn -
+  the pillar the held reverse used to carry.
+- **The spread is COVERAGE, never depth** (note 4). Drag the rake over a square
+  and that square fills, outright. The beat ends when every square has concrete
+  in it - a COUNT, not a mean depth. The old rule ended on `fill_fraction`
+  reaching 0.975 of full, and a cell at 94% was drawn identically to a finished
+  one while the surface carries 6 cm of deliberate noise over a 1 cm signal:
+  what was left to do was not merely hard to see, it was invisible. The chute
+  lays whole squares too, so nothing anywhere is ever part full.
+- **The truck stays in the picture while the child rakes.** It was hidden to
+  everything but its chute because the beat before looked up the drive from
+  under it; that beat is gone, and the PULL shot looks DOWN the drive, so the
+  mixer is at the far end of the frame pouring - which is what "have the truck
+  back in and pour" asks to be able to see.
+- **Vehicles steer** (note 8). `Machine.turn_radius_m`: 0 for the skid steer,
+  which turns on the spot by running its tracks opposite ways and whose
+  signature move that is, and a real circle for the two trucks. Their yaw is
+  rate-limited by the ground they have actually covered, so the nose LAGS the
+  path instead of snapping to each segment - and a road vehicle never pivots to
+  line itself up before moving, which was the least natural thing on the lot.
+- **A sledge's shaft is SQUARE to its head** (note 2), rising from the middle of
+  it. Raked back it read as an axe. The swing plane comes from the board now,
+  because the old axis was taken from the handle and a vertical handle makes
+  that degenerate.
+- **The blow has weight** (note 3): about half a second of swing, and the peg
+  driven over a sixth of the beat after the strike rather than half of it - a
+  thunk, not the hammer pressing it down.
+- **The broom's hands ride forward** (note 6, `broom_hold`), so the stretched
+  handle between them and the brush stays a broom and not a pole. The posed
+  picture reads the same number as the beat.
+- **The gravel's colour cannot outrun the tailgate** (note 7). The creep is
+  geometry - the distance the lip must cover to lay the whole windrow - not a
+  feel number, so the grey never leads the falling stone.
+- **Anything standing on the slab stands on the SLAB** (note 1).
+  `Driveway.stand_y` was written for the tipper crossing its own windrow and
+  never heard of the pour, so from the tip onward it answered `BASE_TOP` and the
+  payoff car sank the slab's whole 100 mm. `concrete_top()` answers "is there a
+  slab here", `surface_y` delegates to it, and one cell lookup serves both.
+
+The job is **22 rows and 77 stops** (was 25 and 83).

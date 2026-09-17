@@ -156,15 +156,19 @@ def build_sledge():
     fin()
     m.mesh_node("Head")
     B = "Body"
+    # SQUARE to the head, not raked back: a sledge shaft enters the eye at 90
+    # degrees to the strike axis, and the raked version read as an axe (the
+    # playtest of 2026-09-16: "hammer handle needs to be 90 degree angle from
+    # the head"). It rises from the middle of the head, z -0.088.
     bm, fin = m.part(B, "Shaft", "Timber", bevel=0.003)
-    add_tube(bm, V(0.0, 0.040, -0.080), V(0.0, 0.62, -0.260), 0.019, 8)
+    add_tube(bm, V(0.0, 0.040, -0.088), V(0.0, 0.66, -0.088), 0.019, 8)
     fin()
     bm, fin = m.part(B, "Wedge", "Metal")
-    add_box(bm, V(0.0, 0.052, -0.080), (0.036, 0.012, 0.036))
+    add_box(bm, V(0.0, 0.052, -0.088), (0.036, 0.012, 0.036))
     fin()
     m.mesh_node(B)
     m.empty("Tip", V(0.0, 0.0, 0.0), zdir=(0, 0, 1), xhint=(1, 0, 0))
-    m.note("head r 0.05 x 0.16, handle through its side, 0.6 long; origin at the striking face")
+    m.note("head 0.08 x 0.08 x 0.15, shaft SQUARE to the strike axis through its middle, 0.62 long; origin at the striking face")
     return m
 
 

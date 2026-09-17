@@ -515,7 +515,7 @@ func target_world() -> Vector3:
 	# A DRAG beat's arrow stands on the tool where the pull begins (the
 	# board's line, the sled, the bay), which the level knows.
 	# A truck waiting to be backed in: its tail, wherever it has rolled to (1.8).
-	if (s.verb == "back_dump" or s.verb == "back_mixer") and level != null and level.has_method("arrival_hint"):
+	if false and level != null and level.has_method("arrival_hint"):
 		return level.arrival_hint(s.target.get_slice(":", 1))
 	if level != null and level.has_method("drag_hint") \
 			and (s.verb == "screed_pull" or s.verb == "joint_cut" or s.verb == "broom_finish" \

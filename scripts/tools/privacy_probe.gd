@@ -42,6 +42,11 @@ const TEXTS := ["res://licenses/Godot-MIT.txt", "res://licenses/Godot-thirdparty
 	"res://licenses/OFL-Fredoka.txt", "res://licenses/OFL-NunitoSans.txt",
 	"res://THIRD_PARTY_NOTICES.md"]
 
+## How many rows the job really has. Never a literal: the day the job's row count
+## changed, a typed one made every save in this suite be refused, and a refused
+## save is a QUIET failure - the level simply starts fresh.
+var _rows: int = JobDef.rows_of("new_driveway")
+
 var _checks: int = 0
 var _failures: int = 0
 
@@ -193,7 +198,7 @@ func _the_save_holds_no_clock() -> void:
 	SaveGame.enabled = true
 	SaveGame.path_override = SAVE_SCRATCH
 	SaveGame.clear()
-	var doc := {"job": "new_driveway", "rows": 25, "verb": "rebar_lay", "nth": 1, "done": 2,
+	var doc := {"job": "new_driveway", "rows": _rows, "verb": "rebar_lay", "nth": 1, "done": 2,
 		"places": [1, 3], "seed": 2096}
 	_check(SaveGame.save_data(doc), "a job saves")
 	var back := SaveGame.load_data()

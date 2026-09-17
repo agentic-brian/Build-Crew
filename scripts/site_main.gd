@@ -144,7 +144,7 @@ const TOOL_REST := {
 ## A stage poses the step that PRODUCES it wherever there is a choice, because
 ## the step is what puts the controls on screen. `based` poses the rebar beat
 ## (the base is what it stands on); `rebar` poses the mixer button, and
-## `--stage=rebar --step=pour_chute --shot=CHUTE --hold` is the pour; `banded`
+## `--stage=rebar --step=rake_pull --shot=PULL --hold` is the spread; `banded`
 ## poses the rake. `tipped` is the compactor, `packed` the kerb board waiting,
 ## `kerbed` its two pegs, `cured` the strip. `done` and `parked` are past the
 ## last step (`stage_step` answers the step count for them); see `pose`.
@@ -749,7 +749,7 @@ func pose(stage: String, step: int = -1, done: int = 0, places: Array = [], play
 	if posed != null:
 		wants = {"push_rubble": "SkidSteer", "skid_leave": "SkidSteer",
 			"tip_gravel": "DumpTruck", "dump_leave": "DumpTruck",
-			"pour_chute": "ConcreteTruck", "rake_pull": "ConcreteTruck",
+			"rake_pull": "ConcreteTruck",
 			"mixer_leave": "ConcreteTruck"}.get(posed.verb, "")
 	if wants == "" and posed == null:
 		# Only when there is no step to ask. A STEP knows whether its phase has a
@@ -761,8 +761,6 @@ func pose(stage: String, step: int = -1, done: int = 0, places: Array = [], play
 	# A truck waiting in the road to be backed in (1.8): where play's street leg
 	# stops it and facing the way play turns it, from the same helpers, so a
 	# `--hold` picture drives the route play drives.
-	if posed != null and SiteVerbs.BACK_VERBS.has(posed.verb):
-		_stage_at_street(String(SiteVerbs.BACK_VERBS[posed.verb]))
 	# Open from the moment the skid steer is on site until the cure shuts it, which
 	# is what play does: posing it shut put a closed garage door behind the pour,
 	# the joints and the broom, in every picture anybody judged them from.
@@ -782,7 +780,7 @@ func pose(stage: String, step: int = -1, done: int = 0, places: Array = [], play
 	# ...but never for a BACKDROP: a menu standing in front of an undrawn truck
 	# is a chute floating in the road, and the loops this branch starts would run
 	# under the title for as long as it was up.
-	if posed != null and not dress_only 			and (posed.verb == "rake_pull" or (posed.verb == "pour_chute" and not play)):
+	if posed != null and not dress_only and posed.verb == "rake_pull":
 		var mixer := machine("ConcreteTruck")
 		if mixer != null:
 			mixer.set_chute(0.0, config.chute_fold_max)
@@ -941,7 +939,7 @@ func stage_step(stage: String) -> int:
 	return at
 
 
-## A `--step` argument: a number, a verb (`pour_chute`), or a verb and which of
+## A `--step` argument: a number, a verb (`rake_pull`), or a verb and which of
 ## its rows (`form_set:2`). Empty asks the stage.
 func step_arg(value: String, stage: String) -> int:
 	if value == "":
@@ -1031,7 +1029,10 @@ func _pose_tool(step: JobStep) -> void:
 			rig.snap(CameraRig.BROOM, drive.bay_marker(bay))
 			var rough := drive.roughest_world_in(band.x, band.y)
 			var head := Vector3(rough.x, Driveway.GRADE + 0.01, rough.z)
-			var bhands := hand_hold(Vector3(0.20, -0.80, 0.55))
+			# The verb's own number, not a copy of it: a posed picture that
+			# holds the broom differently from play is how the screenshots come
+			# to flatter the build (the sledge, 2026-09-16).
+			var bhands := hand_hold(config.broom_hold)
 			t.hover_instant(head, Vector3.DOWN, (bhands - head).normalized())
 			t.aim_handle_at(bhands)
 
@@ -1406,6 +1407,12 @@ func _build_machines() -> void:
 		# shoving nine metres of broken slab, which a bucket is the wrong tool for.
 		if kind == "SkidSteer":
 			m.fit_blade()
+		# A TURNING CIRCLE for anything that drives on a road. The skid steer
+		# keeps 0 - it turns on the spot by running its tracks opposite ways,
+		# which DESIGN 2c calls its signature move - and the two trucks get real
+		# ones, so their noses come round behind the corner instead of snapping
+		# to it (the playtest of 2026-09-16).
+		m.turn_radius_m = {"DumpTruck": 6.0, "ConcreteTruck": 7.0}.get(kind, 0.0)
 		# And the mixer with an EXTENSION CHUTE clipped on (DESIGN 2a): from the
 		# road, the main chute reaches nothing; with the extension it reaches the
 		# kerb end of the form.
@@ -1570,7 +1577,11 @@ func drive_route(m: Machine, corners: Array, seconds: float,
 		var facing := -dir if reverse else dir
 		var want := rad_to_deg(atan2(facing.x, facing.z))
 		var off := absf(wrapf(want - rad_to_deg(m.rotation.y), -180.0, 180.0))
-		if off > 12.0:
+		# ...but only a machine that CAN turn on the spot does. A truck that
+		# pivoted to line itself up before moving was the least natural thing on
+		# the lot; with a turning circle it drives the corner instead, and its
+		# nose comes round as it goes (the playtest of 2026-09-16).
+		if off > 12.0 and m.turn_radius_m <= 0.0:
 			m.spin_to(want, config.spin_time * clampf(off / 90.0, 0.35, 1.5))
 			await m.arrived
 	m.follow(path, seconds, reverse)
@@ -1616,16 +1627,55 @@ func bring_machine(kind: String, seconds: float) -> void:
 		await m.arrived
 		finish_arrival(kind)
 		return
-	# A TRUCK comes past the drive and STOPS in the road, tail to it, lined up on
-	# the way it will back in - engine ticking over, beacon turning - and waits
-	# for the child to back it in (`SiteVerbs.back_dump`/`back_mixer`: the
-	# improvement plan's 1.8, decision 4). It used to back straight in on its
-	# own, beeping; the reverse is the child's hold now, and so is the beeper.
+	# A TRUCK comes past the drive, STOPS in the road tail-on, pauses the way a
+	# driver does before a manoeuvre, and then BACKS ITSELF IN, beeping.
+	#
+	# The child used to wave it in with a held finger (the improvement plan's
+	# 1.8, the user's own decision 4, built in session 5). The playtest of
+	# 2026-09-16 took that back - "backing trucks up with your finger doesn't
+	# feel good git rid of that" - so the manoeuvre belongs to the truck again.
+	# The arrival is still ONE busy BUTTON step, so a tap on the moving truck is
+	# still answered by its horn.
 	await drive_route(m, [OFF_STAGE, street_stop(kind)], config.street_time, false, 2.4)
-	await face_route(m, back_route(kind, m.global_position), true)
+	await get_tree().create_timer(config.back_pause, false).timeout
+	await back_in(m, kind)
+	finish_arrival(kind)
 
 
-## Where a truck stops in the road to wait for the child to back it in.
+## The reverse itself: the truck's own, since the playtest of 2026-09-16.
+##
+## The beeper runs only while it is MOVING, which is the rule the level already
+## had for a reversing truck, and the beacon turns with it.
+func back_in(m: Machine, kind: String) -> void:
+	if m == null:
+		return
+	var path := back_route(kind, m.global_position)
+	await face_route(m, path, true)
+	m.set_path(path, true)
+	m.set_beacon_on(true)
+	if not sfx.is_looping("arrive"):
+		sfx.play_loop(SiteVerbs.SOUND_IDLE, "arrive")
+	sfx.play_loop(SiteVerbs.SOUND_BEEPER, "beeper")
+	await _tween_over(config.back_time, func(k: float) -> void:
+		m.place_on_path(k))
+	m.place_on_path(1.0)
+	# ...and it STRAIGHTENS UP over the last of the manoeuvre. A vehicle with a
+	# turning circle cannot finish squaring itself on the last metre of a route,
+	# so it arrived a dozen degrees off; a driver's last correction closes that,
+	# and it is a correction rather than a pivot - a few degrees while the truck
+	# settles, not a machine spinning on the spot.
+	var want_y := m.rotation.y
+	if m.has_method("path_end_yaw"):
+		want_y = float(m.call("path_end_yaw"))
+	var off_y := wrapf(want_y - m.rotation.y, -PI, PI)
+	if absf(off_y) > deg_to_rad(0.5):
+		var from_y := m.rotation.y
+		await _tween_over(config.back_settle, func(k: float) -> void:
+			m.rotation.y = from_y + off_y * k)
+	sfx.stop_loop("beeper")
+
+
+## Where a truck stops in the road before it backs in.
 func street_stop(_kind: String) -> Vector3:
 	return Vector3(Driveway.CENTRE_X - 7.0, 0.0, STREET_Z)
 
@@ -1689,13 +1739,6 @@ func arrival_hint(kind: String) -> Vector3:
 ## half a finger's reach but never by more than `tap_reach_m` of world at the
 ## truck, and never less than a finger: the tap-on-target rule, which the honk's
 ## plain half-reach (a metre and a half of road from the STREET eye) was not.
-func on_backing_truck(at: Vector2) -> bool:
-	var s := runner.current_step() if runner != null else null
-	if s == null or not SiteVerbs.BACK_VERBS.has(s.verb):
-		return false
-	return _on_truck(machine(String(SiteVerbs.BACK_VERBS[s.verb])), at)
-
-
 ## Is a screen point on this machine by the tap-on-target rule: its box grown by
 ## half a finger's reach, capped at `tap_reach_m` of world, floored at a finger?
 func _on_truck(m: Machine, at: Vector2) -> bool:
@@ -2573,10 +2616,6 @@ func tap_counts(at: Vector2) -> bool:
 	# middle of a nine-metre slab would refuse a perfectly sensible first touch at
 	# the far end.
 	var step := runner.current_step()
-	# Backing a truck in: the press has to land on the truck (1.8). Anywhere
-	# else is a miss, answered with the pop and the arrow's nudge.
-	if step != null and SiteVerbs.BACK_VERBS.has(step.verb):
-		return on_backing_truck(at)
 	# A DRAG beat is aimed at its TOOL - the board, the sled, the plate: a press
 	# on it or within a finger of it picks it up; a press on the empty slab in
 	# front of it is a miss, answered at once rather than with two seconds of
@@ -2853,9 +2892,9 @@ func _backed_by_next_row() -> Machine:
 	if i < 0 or i >= job.steps.size():
 		return null
 	var nxt: JobStep = job.steps[i]
-	if nxt == null or not SiteVerbs.BACK_VERBS.has(nxt.verb):
+	if nxt == null:
 		return null
-	return machine(String(SiteVerbs.BACK_VERBS[nxt.verb]))
+	return null
 
 
 ## The verb of the next BUTTON step from the current one, or "".
@@ -2865,8 +2904,6 @@ func _next_call_verb() -> String:
 	# While a truck is being backed in, the sleeping button still shows THAT
 	# truck: the next call is a whole phase away.
 	var here := runner.current_step()
-	if here != null and SiteVerbs.BACK_VERBS.has(here.verb) and runner.index > 0:
-		return job.steps[runner.index - 1].verb
 	for i in range(maxi(runner.index, 0), job.steps.size()):
 		var s: JobStep = job.steps[i]
 		if s != null and s.kind == JobStep.Kind.BUTTON:
@@ -2977,9 +3014,13 @@ func hold_sledge(t: HandTool, i: int, k: float, seconds: float) -> void:
 	var pivot: Vector3 = down * grip
 	var r := rest.distance_to(pivot)
 	var deg := asin(clampf(config.sledge_lift / maxf(r, 0.01), 0.0, 0.98))
-	# UP x handle, not handle x UP: the other way round swings the head DOWN
-	# through the ground and toward the garage (measured, not guessed).
-	var axis := Vector3.UP.cross(pivot - rest)
+	# The swing plane contains the board's line and UP, so the axis is across it.
+	# It used to be taken from the HANDLE (`UP x (pivot - rest)`), which worked
+	# only while the shaft was raked back; the shaft is square to the head now
+	# (the playtest of 2026-09-16), so the handle runs straight up from it and
+	# that cross product is degenerate. The board decides the plane either way,
+	# and the head still rises on the side the eye is watching from.
+	var axis := Vector3.UP.cross(lie)
 	if axis.length() < 0.001:
 		axis = Vector3.RIGHT
 	var b := Basis(axis.normalized(), deg * clampf(k, 0.0, 1.0))
@@ -3141,13 +3182,6 @@ func _process(delta: float) -> void:
 	var s := runner.current_step()
 	if s == null or s.kind != JobStep.Kind.HOLD:
 		return
-	if SiteVerbs.BACK_VERBS.has(s.verb):
-		# The finger that was on the truck as it came down the street backs it
-		# in the moment it stops (the plan's 1.8) - if it is still down.
-		if _carry_back and _touch_down and not runner.held and not runner.is_busy():
-			_carry_back = false
-			_accept(_touch_at if _touch_at != Vector2.INF else Vector2.ZERO)
-			runner.hold(true)
 		# The ring stands on the truck, which moves: the HUD re-applies the point
 		# it was last given, so it is given the truck's every frame until it is.
 		if not runner.held and hud != null and hud.aiming_at_world() and not runner.arrow_muted():
@@ -4379,11 +4413,6 @@ func resume(point: Dictionary) -> void:
 	var s := job.steps[i]
 	pose(stage_for_step(i), i, done, point.get("places", []) as Array, true)
 	match s.verb:
-		"back_dump", "back_mixer":
-			# Waiting in the road with its engine ticking over, as the street leg
-			# leaves it.
-			if sfx != null:
-				sfx.play_loop(SiteVerbs.SOUND_IDLE, "arrive")
 		"form_strip":
 			# The song is down for the evening, where the cure left it.
 			if sfx != null:
@@ -4399,7 +4428,7 @@ func resume(point: Dictionary) -> void:
 	# shot. A finger pressed during the opening's swoop would be read through a
 	# moving camera - a drag beat moves its work under a still finger - and a
 	# truck waiting in the road is off the WIDE's picture.
-	if s.verb == "pour_chute" or SiteVerbs.SCRUB_VERBS.has(s.verb) or SiteVerbs.BACK_VERBS.has(s.verb):
+	if SiteVerbs.SCRUB_VERBS.has(s.verb):
 		runner.go_shot(s.shot, false)
 	else:
 		rig.snap(CameraRig.WIDE, null)

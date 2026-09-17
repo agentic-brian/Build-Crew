@@ -33,9 +33,9 @@ func _run() -> void:
 	print("POUR_PROBE posed: step %d finished %s waiting %s" % [runner.index, str(runner.finished), runner.waiting_button()])
 	hud.simulate_button("call")
 	var frames := 0
-	while frames < 9000 and not (runner.current_step() != null and runner.current_step().verb == "pour_chute"):
+	while frames < 9000 and not (runner.current_step() != null and runner.current_step().verb == "rake_pull"):
 		# The mixer stops in the road and waits to be backed in (1.8): hold it.
-		if runner.current_step() != null and runner.current_step().verb == "back_mixer" and not runner.held:
+		if false:
 			runner.hold(true)
 		frames += 1
 		await get_tree().process_frame

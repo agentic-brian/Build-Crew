@@ -2749,6 +2749,14 @@ func stand_y(at: Vector3) -> float:
 		# Only as far down the drive as the base has been laid: the tipper pulls
 		# forward over bare dirt while it lays stone behind itself.
 		floor_y = BASE_TOP if (_gravel_k > 0.001 and at.z <= gravel_front_z() + 0.2) else -DIG
+		# ...and once there is CONCRETE here, the slab's own top is what anything
+		# standing on it stands on. This branch was written for the tipper
+		# crossing its own windrow and never heard of the pour, so from the tip
+		# onward it answered BASE_TOP for the rest of the job and the payoff car
+		# sank the slab's whole 100 mm ("tires clipping into driveway at the
+		# end", the playtest of 2026-09-16). `-INF` where there is no slab, so
+		# the tipper still crawls on the base ahead of its own stone.
+		floor_y = maxf(floor_y, concrete_top(at))
 	# The edge of the pad is a RAMP, not a cliff: a machine half on it is half way
 	# down into it. Without this a seven-metre truck pops 20 cm on the frame its
 	# nose crosses the line, which is the one thing that says "this is boxes".
@@ -2782,6 +2790,31 @@ func ride_y(at: Vector3, half: float = 0.95) -> float:
 func pour_at(world: Vector3, amount: float, delta: float = 0.016) -> void:
 	if amount <= 0.0:
 		return
+	var spread: float = config.pour_spread if config != null else 0.62
+	var heap: float = config.pour_heap if config != null else 0.045
+	var ceiling := (GRADE - BASE_TOP) + heap
+	# WHOLE SQUARES, like the rake. The chute used to spread its load by weight
+	# over the cells under the spout, which left a ring of part-filled ones round
+	# every place it had poured - and a part-filled cell is a DEPTH, which is the
+	# thing the playtest of 2026-09-16 took out of this phase. A cell the
+	# concrete has reached is concrete.
+	var full_p := (GRADE - BASE_TOP) + heap * 0.6
+	var laid := 0
+	for iz in range(CELLS_Z):
+		for ix in range(CELLS_X):
+			var i := iz * CELLS_X + ix
+			if _fill[i] >= full_p - 0.0001:
+				continue
+			if Vector2(_cell_x(ix) - world.x, _cell_z(iz) - world.z).length() > spread:
+				continue
+			_fill[i] = full_p
+			laid += 1
+	if laid > 0:
+		_rebuild_slab()
+	return
+
+
+func _pour_at_unused(world: Vector3, amount: float, delta: float = 0.016) -> void:
 	var spread: float = config.pour_spread if config != null else 0.62
 	var heap: float = config.pour_heap if config != null else 0.045
 	var ceiling := (GRADE - BASE_TOP) + heap
@@ -3067,6 +3100,55 @@ func settle(k: float) -> void:
 		if _fill[i] < full - 0.0005:
 			_fill[i] = lerpf(_fill[i], full, kk)
 	_refresh_cells()
+
+
+## Concrete wherever the rake's head goes: every cell whose middle is within
+## `radius` of `world` goes straight to FULL. Returns how many were filled by
+## this stroke, so the verb knows whether the tool did anything.
+##
+## This replaced a conservation model - `rake_to` moved concrete that already
+## existed, only off a donor with surplus, and re-drained the cells under the
+## chute to a floor every stroke. Three things came out of that and all three
+## were the same complaint: dragging over slab already at grade did nothing at
+## all (a dead tool under a moving finger), the part nearest the truck kept
+## going BACK to dark mud while the child worked, and what was left to do was a
+## DEPTH - a centimetre of missing fill under six centimetres of deliberate
+## surface noise, which no eye can read. "Needs less physics.. when you drag
+## over a sqare it puts the concreate there" (the playtest of 2026-09-16).
+func rake_fill(world: Vector3, radius: float) -> int:
+	var full := GRADE - BASE_TOP
+	var did := 0
+	var r2 := radius * radius
+	for iz in range(CELLS_Z):
+		for ix in range(CELLS_X):
+			var i := iz * CELLS_X + ix
+			if _fill[i] >= full - 0.0001:
+				continue
+			var c := cell_world(ix, iz)
+			if Vector2(c.x - world.x, c.z - world.z).length_squared() > r2:
+				continue
+			_fill[i] = full
+			did += 1
+	if did > 0:
+		_rebuild_slab()
+	return did
+
+
+## How many cells have concrete in them at all.
+func covered_cells() -> int:
+	var full := GRADE - BASE_TOP
+	var n := 0
+	for i in range(_fill.size()):
+		if _fill[i] >= full - 0.0001:
+			n += 1
+	return n
+
+
+## 0..1 of the form that has concrete in it. THE rule the spread beat ends on -
+## a COUNT of squares, not a mean depth, so what is left to do is a colour on
+## the slab and never a thickness.
+func covered_fraction() -> float:
+	return float(covered_cells()) / float(maxi(_fill.size(), 1))
 
 
 func fill_fraction() -> float:
@@ -4064,16 +4146,17 @@ func pose_stage(stage: String) -> void:
 		for i in range(1, bar_count() + 1):
 			set_bar(i, 1.0)
 	if at == s.call("banded"):
+		# What the chute has put down by the time the child picks the rake up:
+		# a short heap at the kerb end, FULL, and bare stone everywhere else.
+		# There is no half-filled tier any more - a cell is bare or it is
+		# concrete, because a depth is what the child could not read.
 		var full_b := GRADE - BASE_TOP
 		var heap_b: float = config.pour_heap if config != null else 0.045
 		for iz in range(CELLS_Z):
 			for ix in range(CELLS_X):
 				var i := iz * CELLS_X + ix
-				var z := _cell_z(iz)
-				if z >= Z_KERB - 2.4:
+				if _cell_z(iz) >= Z_KERB - 1.2:
 					_fill[i] = full_b + heap_b * 0.6
-				elif z >= Z_KERB - 3.2:
-					_fill[i] = full_b * 0.45
 		_refresh_cells()
 		set_wet(config.wet_poured if config != null else 0.80)
 	if at >= poured_at:
@@ -4234,15 +4317,26 @@ func pool_colour_at(world: Vector3) -> Color:
 ## How high the concrete (or, where there is none, the base) stands under a
 ## world point: what a splash or a stream's foot has to sit ON.
 func surface_y(world: Vector3) -> float:
+	return maxf(concrete_top(world), BASE_TOP)
+
+
+## The top of the CONCRETE under a world point, or -INF where there is none.
+##
+## `surface_y` answers "concrete, or the base underneath it", which is what a
+## splash sits on. This answers "is there a slab here at all", which is what a
+## WHEEL needs, and the two are not the same question: conflating them would
+## float the tipper over bare dirt. One cell lookup serves both, so they cannot
+## drift apart.
+func concrete_top(world: Vector3) -> float:
 	var cw := WIDTH / float(CELLS_X)
 	var cl := LENGTH / float(CELLS_Z)
 	var ix := int(floor((world.x - (CENTRE_X - WIDTH * 0.5)) / cw))
 	var iz := int(floor((world.z - Z_APRON) / cl))
 	if ix < 0 or ix >= CELLS_X or iz < 0 or iz >= CELLS_Z:
-		return BASE_TOP
+		return -INF
 	var i := iz * CELLS_X + ix
 	if _fill[i] <= MIN_DRAW:
-		return BASE_TOP
+		return -INF
 	return BASE_TOP + _fill[i] + _lump(ix, iz, i)
 
 

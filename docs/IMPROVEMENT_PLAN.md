@@ -1024,12 +1024,19 @@ Garage): the CREW is the child. Nothing is left open.
 
 1. **The pour's control:** flip the pads and mime them (2.1, inside the
    contract) - and then go on to steer with a finger on the form (2.2)?
+   **Answered 2026-09-15 (pads stay), then REVERSED by the playtest of
+   2026-09-16 having played them: "forget chute controls.. just have the truck
+   back in and pour and move straight to raking it out." The pads and the whole
+   pour row are deleted.**
 2. **The "YAY!" banner:** keep the family's word, or make it a picture (3.3)?
 3. **Machines leaving in the background** (3.2) versus watching the slow
    trucks go. If you want to watch them, keep the leave and take 1.8 (the
    honk) so the watch answers a finger.
 4. **The last leg of an arrival as a hold** (1.8 M) - the banksman - or keep
-   "the machines drive themselves".
+   "the machines drive themselves". **Answered yes 2026-09-15 and built in
+   session 5, then REVERSED by the playtest of 2026-09-16 having played it:
+   "backing trucks up with your finger doesn't feel good git rid of that." Both
+   back-in rows are deleted and the trucks back themselves in.**
 5. **The kerb board after the base** (5.2) - a one-board change to the phase
    order you set.
 6. **The plate compactor** (5.1) - a new machine phase and the largest

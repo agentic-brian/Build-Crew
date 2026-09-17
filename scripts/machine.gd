@@ -133,6 +133,15 @@ var _nodes: Dictionary = {}
 ## the user, 2026-09-14). They orbit the axle with it.
 var _corner: Dictionary = {}
 var _corner_rest: Dictionary = {}
+## How tight this vehicle can turn, metres of radius. 0 is "on the spot", which
+## on this lot is the SKID STEER and nothing else - a skid steer turns by running
+## its tracks opposite ways and the design calls that its signature move. A road
+## vehicle gets a real turning circle, and its nose then LAGS the path it is
+## following, which is what reading as "steered" actually means (the playtest of
+## 2026-09-16: "make turn around and back up of vehicles more natural").
+@export var turn_radius_m: float = 0.0
+
+
 ## The push blade, when one is fitted, and the marker on its cutting edge.
 var _blade: Node3D
 var _blade_edge: Node3D
@@ -700,8 +709,19 @@ func _advance_path(e: float) -> void:
 	if _path_rev:
 		facing = -facing
 	global_position = Vector3(at.x, global_position.y, at.z)
-	rotation.y = atan2(facing.x, facing.z)
 	var moved := Vector2(global_position.x - was.x, global_position.z - was.z).length()
+	# STEERED, not snapped. A vehicle with a turning circle can only change
+	# heading as far as the ground it has just covered allows, so the nose comes
+	# round behind the path instead of jumping to each new segment's angle - and
+	# a corner too tight to drive now LOOKS too tight instead of looking like a
+	# pirouette. `turn_radius_m` 0 keeps the old snap, which is what the skid
+	# steer wants.
+	var want_y := atan2(facing.x, facing.z)
+	if turn_radius_m <= 0.0:
+		rotation.y = want_y
+	else:
+		var most := moved / turn_radius_m
+		rotation.y += clampf(wrapf(want_y - rotation.y, -PI, PI), -most, most)
 	roll(-moved if _path_rev else moved)
 
 
@@ -817,6 +837,22 @@ func has_blade() -> bool:
 
 ## Where the blade IS - 0 on the dirt, 1 carried high - so a verb can lower it
 ## FROM WHERE IT STANDS rather than from where it usually starts.
+## The heading the path this machine last followed ends on, in radians. A
+## steered vehicle lags its route, so the level uses this to let it straighten
+## up as it comes to rest.
+func path_end_yaw() -> float:
+	if _path.size() < 2:
+		return rotation.y
+	var dir: Vector3 = _path[_path.size() - 1] - _path[_path.size() - 2]
+	dir.y = 0.0
+	if dir.length_squared() < 0.000001:
+		return rotation.y
+	var facing := dir.normalized()
+	if _path_rev:
+		facing = -facing
+	return atan2(facing.x, facing.z)
+
+
 func bucket_lift() -> float:
 	return _bucket_lift
 

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="JobDef" load_steps=30 format=3]
+[gd_resource type="Resource" script_class="JobDef" load_steps=27 format=3]
 
 ; NEW DRIVEWAY - the job the level was built around (DESIGN 2), as data.
 ;
@@ -7,13 +7,18 @@
 ; the four the user chose to add: each truck's reverse leg is the child's hold,
 ; the base is packed with a plate compactor, the kerb board and its two pegs go
 ; in AFTER the base (the trucks back through that end), and the child strips
-; their own forms after the cure. Twenty-five rows.
+; their own forms after the cure. Twenty-two rows, since the playtest of 2026-09-16: the two rows where the child
+; waved a truck back in are gone ("backing trucks up with your finger doesn't
+; feel good"), and so is the chute's own steering row ("forget chute controls..
+; just have the truck back in and pour and move straight to raking it out") -
+; the mixer backs itself in, pours by itself, and the child rakes it out.
 ;
-; Eighty-three progress stops, weighted by the child's MINUTES rather than their
+; Seventy-seven progress stops, weighted by the child's MINUTES rather than their
 ; taps (the improvement plan's 3.6): the jackhammer's twelve bites, two pushes
-; (4), four boards, ten stakes, the base (2), three bays of the plate (6), twelve
-; bars, the POUR (6) and the come-along (8), the water (4), the screed (4), two
-; joints, three bays of broom (6) and three boards stripped. Calling a machine on
+; (4), four boards, ten stakes, the base (2), the plate (6), twelve bars, the
+; RAKE (8) - which is now the whole of spreading the concrete, the pour's own six
+; having gone with its pads - the water (4), the screed (4), two joints, three
+; bays of broom (6) and three boards stripped. Calling a machine on
 ; is worth 0 - pressing a button is not a child's WORK - and so is waving a truck
 ; back in and waiting for the cure, so the bar's last stop is the last board off.
 ;
@@ -121,23 +126,6 @@ shot = "WIDE"
 count = 1
 sound = ""
 progress_weight = 0
-
-; 7b. BACK IT IN. The child is the banksman: a finger on the truck and it backs
-;     up the drive, beeping, only while the finger is down (decision 4). Worth
-;     nothing on the bar - guiding a truck is not the job's work - and its
-;     target is `Back:`, not `Machine:`, so a finger still down when it stops
-;     does not start the tip under a camera that is still moving.
-[sub_resource type="Resource" id="Step_back_dump"]
-script = ExtResource("2_step")
-kind = 3
-target = "Back:DumpTruck"
-verb = "back_dump"
-tool = "none"
-shot = "STREET"
-count = 1
-sound = ""
-progress_weight = 0
-
 ; 8. THE BASE. Press and hold: the bed goes up, the limestone runs out, and the
 ;    truck drives out as it tips so the load lays as a windrow up the drive.
 [sub_resource type="Resource" id="Step_base"]
@@ -218,9 +206,8 @@ shot = "BARS"
 count = 12
 sound = ""
 progress_weight = 1
-
-; 10. The button once more: the mixer comes down the street and stops, waiting
-;     to be backed to the kerb.
+; 11. CALL THE MIXER. The green button: the concrete truck comes down the street
+;     and backs itself onto the kerb end, and its chute swings out.
 [sub_resource type="Resource" id="Step_call_mixer"]
 script = ExtResource("2_step")
 kind = 1
@@ -232,41 +219,15 @@ count = 1
 sound = ""
 progress_weight = 0
 
-; 10b. BACK IT TO THE KERB - and no further, because the steel is down. The
-;      child's hold again; then the chute comes out.
-[sub_resource type="Resource" id="Step_back_mixer"]
-script = ExtResource("2_step")
-kind = 3
-target = "Back:ConcreteTruck"
-verb = "back_mixer"
-tool = "none"
-shot = "STREET"
-count = 1
-sound = ""
-progress_weight = 0
-
-; 11. THE POUR - the centrepiece (DESIGN 2a). The truck stops being drawn and the
-;     camera comes right up to the chute, so what is on screen is the thing the
-;     child is steering and the form it is filling. LEFT and RIGHT swing the chute
-;     across the form, UP and DOWN walk the pour down the drive and back. It ends
-;     when every cell of the form is up to grade. Worth six stops of the bar, and
-;     the only beat that cannot be finished by holding still.
-[sub_resource type="Resource" id="Step_pour"]
-script = ExtResource("2_step")
-kind = 3
-target = "Machine:ConcreteTruck"
-verb = "pour_chute"
-tool = "none"
-shot = "CHUTE"
-count = 1
-sound = ""
-progress_weight = 6
-
-; 11b. PULL IT UP. The chute keeps running into the kerb end; the child DRAGS the
-;      come-along and the concrete comes up the form to it, a stroke at a time,
-;      from where the chute leaves it. Seen from the garage door, looking down
-;      the drive at the concrete coming toward you. It ends when every cell of
-;      the form is up to grade: the filling game the user asked for.
+; 12. SPREAD IT. The chute pours into the kerb end by itself - there are no
+;     steering pads any more (the playtest of 2026-09-16: "forget chute
+;     controls") - and the child DRAGS the rake over the form. Wherever the rake
+;     goes, that square of the form fills: bare stone in front of the head, wet
+;     concrete behind it, a hard edge between them and NOTHING to judge by
+;     depth ("currently it is hard to determine what still needs raked because
+;     you are looking for thickness.. get rid of that"). It ends when every
+;     square has concrete in it. Seen from the garage door, looking down the
+;     drive at the concrete coming toward you.
 [sub_resource type="Resource" id="Step_rake"]
 script = ExtResource("2_step")
 kind = 3
@@ -402,4 +363,4 @@ name = "New driveway"
 slab = SubResource("Slab_drive")
 arrives_with = "old_drive"
 payoff = "park_on_it"
-steps = Array[ExtResource("2_step")]([SubResource("Step_jack"), SubResource("Step_call_skid"), SubResource("Step_push"), SubResource("Step_skid_off"), SubResource("Step_forms"), SubResource("Step_stakes"), SubResource("Step_call_dump"), SubResource("Step_back_dump"), SubResource("Step_base"), SubResource("Step_dump_off"), SubResource("Step_compact"), SubResource("Step_kerb_form"), SubResource("Step_kerb_stakes"), SubResource("Step_rebar"), SubResource("Step_call_mixer"), SubResource("Step_back_mixer"), SubResource("Step_pour"), SubResource("Step_rake"), SubResource("Step_mixer_off"), SubResource("Step_water"), SubResource("Step_screed"), SubResource("Step_joints"), SubResource("Step_broom"), SubResource("Step_cure"), SubResource("Step_strip")])
+steps = Array[ExtResource("2_step")]([SubResource("Step_jack"), SubResource("Step_call_skid"), SubResource("Step_push"), SubResource("Step_skid_off"), SubResource("Step_forms"), SubResource("Step_stakes"), SubResource("Step_call_dump"), SubResource("Step_base"), SubResource("Step_dump_off"), SubResource("Step_compact"), SubResource("Step_kerb_form"), SubResource("Step_kerb_stakes"), SubResource("Step_rebar"), SubResource("Step_call_mixer"), SubResource("Step_rake"), SubResource("Step_mixer_off"), SubResource("Step_water"), SubResource("Step_screed"), SubResource("Step_joints"), SubResource("Step_broom"), SubResource("Step_cure"), SubResource("Step_strip")])

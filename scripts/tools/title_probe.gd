@@ -17,6 +17,11 @@ const SCRATCH := "user://title_probe_save.json"
 ## vanishes without this number moving is a seat nobody decided on.
 const TITLE_SEATS_EXPECTED := 1
 
+## How many rows the job really has. Never a literal: the day the job's row count
+## changed, a typed one made every save in this suite be refused, and a refused
+## save is a QUIET failure - the level simply starts fresh.
+var _rows: int = JobDef.rows_of("new_driveway")
+
 var _checks: int = 0
 var _failures: int = 0
 var _packed: PackedScene
@@ -211,7 +216,7 @@ func _the_modes() -> void:
 		"and it is the very lot the disc was standing in front of, not another one (%d)" % offered)
 	await _free(title)
 	# 2. A job the child left.
-	var doc := {"job": "new_driveway", "rows": 25, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 2096}
+	var doc := {"job": "new_driveway", "rows": _rows, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 2096}
 	SaveGame.save_data(doc)
 	title = await _title()
 	lot = title.backdrop()
@@ -255,8 +260,8 @@ func _the_modes() -> void:
 func _the_busy_rows() -> void:
 	print("--- the rows that leave something running ---")
 	var docs := {
-		"a job left at the pour": {"job": "new_driveway", "rows": 25, "verb": "pour_chute", "nth": 1, "done": 0, "places": [], "seed": 2096},
-		"a job left at the come-along": {"job": "new_driveway", "rows": 25, "verb": "rake_pull", "nth": 1, "done": 0, "places": [], "seed": 2096},
+		"a job left at the spread": {"job": "new_driveway", "rows": _rows, "verb": "rake_pull", "nth": 1, "done": 0, "places": [], "seed": 2096},
+		"a job left at the come-along": {"job": "new_driveway", "rows": _rows, "verb": "rake_pull", "nth": 1, "done": 0, "places": [], "seed": 2096},
 	}
 	for what: String in docs:
 		SaveGame.clear()
@@ -284,11 +289,11 @@ func _the_busy_rows() -> void:
 func _the_refusals() -> void:
 	print("--- a save the level would not take ---")
 	var docs := {
-		"another job": {"job": "patio", "rows": 25, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 5},
-		"a job with a row added since": {"job": "new_driveway", "rows": 26, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 5},
-		"a verb the job has not got": {"job": "new_driveway", "rows": 25, "verb": "edger", "nth": 1, "done": 0, "places": [], "seed": 5},
-		"no seed": {"job": "new_driveway", "rows": 25, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3]},
-		"the last board stripped": {"job": "new_driveway", "rows": 25, "verb": "form_strip", "nth": 1, "done": 3, "places": [1, 2, 3], "seed": 5},
+		"another job": {"job": "patio", "rows": _rows, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 5},
+		"a job with a row added since": {"job": "new_driveway", "rows": _rows + 1, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 5},
+		"a verb the job has not got": {"job": "new_driveway", "rows": _rows, "verb": "edger", "nth": 1, "done": 0, "places": [], "seed": 5},
+		"no seed": {"job": "new_driveway", "rows": _rows, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3]},
+		"the last board stripped": {"job": "new_driveway", "rows": _rows, "verb": "form_strip", "nth": 1, "done": 3, "places": [1, 2, 3], "seed": 5},
 	}
 	for what: String in docs:
 		SaveGame.clear()
@@ -303,7 +308,7 @@ func _the_refusals() -> void:
 
 func _the_hold() -> void:
 	print("--- the new drive ---")
-	var doc := {"job": "new_driveway", "rows": 25, "verb": "jack_spot", "nth": 1, "done": 2, "places": [2, 3], "seed": 2096}
+	var doc := {"job": "new_driveway", "rows": _rows, "verb": "jack_spot", "nth": 1, "done": 2, "places": [2, 3], "seed": 2096}
 	# Let go early: nothing happens.
 	SaveGame.clear()
 	SaveGame.save_data(doc)
@@ -360,7 +365,7 @@ func _the_hold() -> void:
 
 func _the_backdrop() -> void:
 	print("--- the lot behind the row ---")
-	var doc := {"job": "new_driveway", "rows": 25, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 2096}
+	var doc := {"job": "new_driveway", "rows": _rows, "verb": "rebar_lay", "nth": 1, "done": 2, "places": [1, 3], "seed": 2096}
 	SaveGame.clear()
 	SaveGame.save_data(doc)
 	var before := FileAccess.get_file_as_string(SCRATCH)
@@ -501,7 +506,7 @@ func _a_second_job_keeps_its_save() -> void:
 	SaveGame.enabled = true
 	SaveGame.path_override = SCRATCH
 	SaveGame.clear()
-	SaveGame.save_data({"job": "zz_probe_job", "rows": 25, "verb": "rebar_lay",
+	SaveGame.save_data({"job": "zz_probe_job", "rows": _rows, "verb": "rebar_lay",
 		"nth": 1, "done": 2, "places": [1, 3], "seed": 2096})
 	var title := (load("res://scenes/main.tscn") as PackedScene).instantiate() as TitleMain
 	add_child(title)

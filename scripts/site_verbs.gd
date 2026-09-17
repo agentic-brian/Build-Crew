@@ -32,9 +32,14 @@ extends Node
 ## and hold and it drives out dropping rock"): the pads were a second control to
 ## learn for work that only ever went one way. The pour keeps all four, because
 ## aiming it IS the phase.
-const PAD_VERBS := {
-	"pour_chute": ["up", "down", "left", "right"],
-}
+## Beats worked with the four STEERING PADS. Empty since the playtest of
+## 2026-09-16: the pour's chute was the only one, and the pads were the only
+## control scheme in a job where every other beat is a tap, a hold on the
+## picture or a drag. A finger on the picture during that beat was answered by a
+## pad being kicked in the corner, which is the opposite of "a tap is answered
+## by the thing under it". The HUD can still raise pads - the safe-area probe
+## measures them - but no beat asks it to.
+const PAD_VERBS := {}
 ## The beats worked by dragging a finger across the slab. `SiteMain` reads this
 ## to decide what a tap may land on and to give a stick a cursor.
 const SCRUB_VERBS := {
@@ -44,12 +49,6 @@ const SCRUB_VERBS := {
 	"screed_pull": true,
 	"joint_cut": true,
 	"compact_base": true,
-}
-## The beats where the child BACKS A TRUCK IN (the improvement plan's 1.8, the
-## user's decision 4), and which machine: a press has to land on that truck.
-const BACK_VERBS := {
-	"back_dump": "DumpTruck",
-	"back_mixer": "ConcreteTruck",
 }
 ## The site's own noises (the user, 2026-09-12: "Correct all the sounds").
 ##
@@ -571,7 +570,13 @@ func stake_drive(runner: JobRunner, subject: Node3D, targets: Array[Node3D],
 	await _bite(runner, config.stake_time, config, "", func(k: float) -> void:
 		# The stake moves FIRST in the frame, so the face below reads the cap
 		# where it is now.
-		drive.set_stake(i, clampf((k - strike) / maxf(0.85 - strike, 0.05), 0.0, 1.0))
+		# The peg goes in ON the blow - a THUNK, not a slow sink. It used to take
+		# every frame from the strike to 0.85 of the beat, which read as the
+		# hammer pressing it down rather than driving it ("more like it hits the
+		# top and the spike goes in", the playtest of 2026-09-16). A sixth of the
+		# beat after the strike, and the rest of the beat is the head resting on
+		# the cap where it landed.
+		drive.set_stake(i, clampf((k - strike) / 0.16, 0.0, 1.0))
 		# The SWING: down from the wind-up it was already waiting at, on the
 		# handle's own arc, accelerating into the cap at `sledge_strike`. Past
 		# the strike `hold_sledge` reads the cap live, so the face rides the peg
@@ -603,56 +608,6 @@ func call_dump(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
 ## ticking over and beacon turning; a finger on it and it backs up the drive,
 ## beeping, for as long as the finger holds - and stops where it is when it
 ## lifts. The street leg before it stays the machine's own.
-func back_dump(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
-		_tool: Node3D, config: SiteConfig) -> void:
-	await _back_in(runner, "DumpTruck", config)
-
-
-## The mixer, backed to the kerb and no further; then its chute comes out (the
-## user's words), which is the picture that says "this is about to pour".
-func back_mixer(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
-		_tool: Node3D, config: SiteConfig) -> void:
-	await _back_in(runner, "ConcreteTruck", config)
-	var site: Variant = runner.level
-	var mixer: Machine = site.machine("ConcreteTruck")
-	if mixer == null:
-		return
-	# No gold ring over a parked truck with nothing left to hold while the chute
-	# swings out.
-	runner.mute_arrow(config.chute_out_time + 0.2)
-	site.sfx.play_group(SOUND_RAM)
-	await _ease(runner, config.chute_out_time, func(k: float) -> void:
-		mixer.set_chute(0.0, k * config.chute_fold_max))
-
-
-## The held reverse leg both trucks share.
-func _back_in(runner: JobRunner, kind: String, config: SiteConfig) -> void:
-	var site: Variant = runner.level
-	var m: Machine = site.machine(kind)
-	if m == null or site == null:
-		return
-	var path: Array[Vector3] = site.back_route(kind, m.global_position)
-	# Already lined up in play (the street leg ends facing it); a posed stop gets
-	# the same small turn here.
-	await site.face_route(m, path, true)
-	m.set_path(path, true)
-	m.set_beacon_on(true)
-	if not site.sfx.is_looping("arrive"):
-		site.sfx.play_loop(SOUND_IDLE, "arrive")
-	await _hold(runner, config.back_time, config, SOUND_BEEPER, func(k: float) -> void:
-		m.place_on_path(k * k * (3.0 - 2.0 * k))
-		# The ring follows a truck still rolling to a stop after the lift.
-		if not runner.held:
-			runner.update_arrow()
-	, "beeper", "arrive", config.back_ramp, true)
-	m.place_on_path(1.0)
-	# (No mute here: the next step's own arrow takes the ring off the truck in
-	# this same frame, and a mute across the step boundary left the tip with no
-	# ring and no mime at all when the finger was already up - the session-5
-	# verification pass.)
-	site.finish_arrival(kind)
-
-
 ## The bed goes up while the finger is down and the limestone runs out of the
 ## tailgate, the truck driving out as it tips so the load is laid as a windrow
 ## rather than dropped in one heap - which is how a base really goes in, and is
@@ -672,7 +627,14 @@ func tip_gravel(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	# It was reversed up the drive, tailgate at the far end: it pulls FORWARD as it
 	# tips, laying the load behind it, so its wheels stay off the new base.
 	var from := truck.global_position.z
-	var to := from + config.tip_crawl
+	# THE WINDROW'S FRONT IS THE TAILGATE. The base's colour front crosses the
+	# whole slab in `tip_time`, so if the truck crosses less than that the grey
+	# runs away from the falling stone and the child watches the drive change
+	# colour ahead of the rock ("its doing it faster than the truck is pouring
+	# rock", the playtest of 2026-09-16). The creep is therefore GEOMETRY and not
+	# a feel number: the distance the lip has to cover to reach the end of the
+	# form, plus whatever `tip_crawl` still wants beyond it.
+	var to := from + maxf(Driveway.Z_KERB - truck.bed_lip_world().z, 0.0) + config.tip_crawl
 	var was := [from]
 	site.sfx.play_loop(SOUND_IDLE, "dump")
 	truck.set_beacon_on(true)
@@ -809,160 +771,18 @@ func call_mixer(runner: JobRunner, _subject: Node3D, _targets: Array[Node3D],
 		_tool: Node3D, config: SiteConfig) -> void:
 	var site: Variant = runner.level
 	await site.bring_machine("ConcreteTruck", config.arrive_time)
-
-
-## THE beat (DESIGN 2a), and the one the user asked for a visual trick on:
-##
-##   "I think we should detach the chute from the truck and move the camera right
-##    up to it, so the player feels like they are pouring the cement and we don't
-##    have the truck in the way visually. Just the player moving the chute back
-##    and forth and forward / backwards."
-##
-## So the truck stops being DRAWN (`Machine.show_only(["Chute"])`) and the camera
-## comes in beside the spout. Everything else about it is unchanged and honest:
-## the truck is still there, still creeping down the drive under the child's
-## thumb, still rolling its wheels and still standing on the base. Nothing is
-## duplicated, nothing teleports, and when the beat ends the truck is drawn again
-## exactly where it really got to, ready to drive itself out.
-##
-##   LEFT / RIGHT  swing the chute across the width of the form
-##   UP / DOWN     walk the pour down the drive and back up it
-##
-## Both halves of that are measured rather than invented. The chute's own swing
-## reaches about 3.1 m across - very nearly the 3.6 m width - and folding it makes
-## almost no difference to WHERE it lands (0.11 m, `machine_probe`), because the
-## spout is already as far back as that arm reaches. The length of the drive is
-## the TRUCK's job, exactly as it is on a real pour.
-##
-## Concrete lands where the spout really points, heaps up where it lands, and
-## runs downhill into the lower cells - so pouring into one spot still fills the
-## form, just slowly. The beat ends when every cell is up to grade. There is no
-## way to fail; if the child goes still for `chute_hint_delay`, the arrow goes and
-## hangs over the emptiest corner.
-func pour_chute(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
-		_tool: Node3D, config: SiteConfig) -> void:
-	var drive := subject as Driveway
-	var site: Variant = runner.level
+	# ...and its chute comes out, which is the picture that says "this is about
+	# to pour". It used to hang off the child's held reverse (`back_mixer`);
+	# that row is gone, so it hangs off the call.
 	var mixer: Machine = site.machine("ConcreteTruck")
-	if drive == null or mixer == null:
+	if mixer == null:
 		return
-	var swing := 0.0
-	var idle := 0.0
-	var z := mixer.global_position.z
-	var was := [z]
-	mixer.spin_drum(config.drum_rps)
-	# At work while it pours (4.5) - undrawn for the pour, and the light hangs
-	# under the beacon's own mesh, so it goes with the body.
-	mixer.set_beacon_on(true)
-	mixer.set_chute(swing, config.chute_fold_max)
-	mixer.set_chute_mud(true)
-	# Not until the eye is AT the chute. This beat starts on the frame its step
-	# is entered, while the shot is still easing down from the wide, and a truck
-	# that blinked out of the wide picture with its chute left hanging in the
-	# air was a teleport in front of the child (the improvement plan's 0.6). The
-	# drum is already turning, so the flight down shows a truck at work.
-	while runner.rig != null and runner.rig.is_moving():
-		await runner.get_tree().process_frame
-	# The truck goes away and the chute stays: the whole trick, in one call.
-	mixer.show_only(["Chute"])
-	site.sfx.play_loop(SOUND_DRUM, "mixer")
-	site.sfx.play_loop(SOUND_CONCRETE, "concrete")
-	drive.set_wet(config.wet_poured)
-	site.set_pour(true)
-	# How much concrete a second fills the whole form, if it all landed in it.
-	var rate := (Driveway.GRADE - Driveway.BASE_TOP) * float(Driveway.CELLS_X * Driveway.CELLS_Z) \
-		/ maxf(config.pour_time, 0.5)
-	# How far the spout stands behind the truck, measured off the model, so the
-	# truck's travel limits are worked out from where it really POURS.
-	var reach := mixer.global_position.z - mixer.pour_point_world(Driveway.GRADE).z
-	# THE TRUCK STAYS ON THE ROAD (DESIGN 2a, 2026-09-14). The steel is down on
-	# the base and a wheel on a rebar chair is a wince a groundworker never
-	# forgets, so the mixer stands at the kerb with its tail to the drive and only
-	# creeps forward along the road. The chute reaches the kerb end of the form;
-	# the rest is the come-along's job (`rake_pull`).
-	var z_min: float = site.mixer_stand_z()
-	var z_max: float = z_min + config.road_creep
-	var band_from := z_min - reach - 0.45
-	site.pour_band_from = band_from
-	# The camera starts where the pour starts, not where it was left. It is fed the
-	# TRUCK's position less the spout's straight-back offset, never the live pour
-	# point: swinging the chute pulls the stream 0.87 m nearer the truck, and a
-	# camera that followed that lurched back and forth every time the child touched
-	# a side pad.
-	site.set_pour_view(z - reach, 1.0)
-	while drive.band_fraction(band_from) < config.band_done:
-		var dt := _dt(runner)
-		var moved := false
-		if site.pad_held("left"):
-			swing -= config.chute_swing_rate * dt
-			moved = true
-		if site.pad_held("right"):
-			swing += config.chute_swing_rate * dt
-			moved = true
-		# UP means UP the picture (the improvement plan's 2.1): the CHUTE eye
-		# looks up the drive toward the garage, so the pour goes up the screen
-		# when the truck creeps BACK toward the kerb (-Z) and comes down the
-		# screen when it creeps away along the road. It read backwards for
-		# four playtests - the arrow that pointed at the garage sent the
-		# concrete toward the child.
-		if site.pad_held("up"):
-			z -= config.truck_creep_speed * dt
-			moved = true
-		if site.pad_held("down"):
-			z += config.truck_creep_speed * dt
-			moved = true
-		swing = clampf(swing, -config.chute_swing_deg, config.chute_swing_deg)
-		# Along the road only: from the kerb, forward as far as the chute still
-		# lands on the form. Never a wheel on the pad.
-		z = clampf(z, z_min, z_max)
-		mixer.global_position.z = z
-		site.reseat(mixer)
-		mixer.roll(z - was[0])
-		was[0] = z
-		mixer.set_chute(swing, config.chute_fold_max)
-		var at := mixer.pour_point_world(Driveway.GRADE)
-		drive.pour_at(at, rate * dt, dt)
-		site.set_pour_point(mixer.spout_world(), at, mixer.spout_dir())
-		# The camera walks down the drive after the pour, along its length only.
-		site.set_pour_view(z - reach, dt)
-		runner.partial(clampf(drive.band_fraction(band_from) / config.band_done, 0.0, 1.0))
-		# The hint: only after the child has been still for a while, and it goes
-		# the moment they touch a pad again.
-		idle = 0.0 if moved else idle + dt
-		if OS.has_environment("BC_DEBUG") and Engine.get_process_frames() % 40 == 0:
-			var e := drive.emptiest_in_band(band_from)
-			print("POUR_HINT idle %.2f moved %s held u/d/l/r %s/%s/%s/%s stick %s emptiest %s frac %.2f band %.2f pointer_lit %s"
-				% [idle, str(moved), str(site.pad_held("up")), str(site.pad_held("down")),
-					str(site.pad_held("left")), str(site.pad_held("right")), str(Pad.move()), str(e),
-					drive.fill_frac_at(e), drive.band_fraction(band_from),
-					str(site.hud.pointer.lit() if site.hud != null and site.hud.pointer != null else "-")])
-		if idle > config.chute_hint_delay:
-			# The arrow only: a ring means "tap here", and this beat is steered
-			# with the pads. And only on a cell that LOOKS short - under half -
-			# never on concrete that is plainly there (round 12: the emptiest
-			# cell of a nearly full band was at 80% and read as finished).
-			var empty := drive.emptiest_in_band(band_from)
-			if drive.fill_frac_at(empty) < 0.5:
-				runner.hold_arrow(empty, 0.45, Vector3.INF, false)
-			else:
-				runner.release_arrow()
-		elif moved:
-			runner.release_arrow()
-		await runner.get_tree().process_frame
-	# The chute KEEPS RUNNING into the next beat - the rake pulls what it lays -
-	# so nothing is stopped here. `mixer_leave` puts the truck back together.
-	# (No chime of its own: every phase the bar counts ends on the one "done"
-	# note, from `SiteMain._on_step_done` - the plan's 1.6.)
-	runner.release_arrow()
-
-
-## THE COME-ALONG (DESIGN 2a). The chute goes on pouring into the kerb end of
-## the form on its own, sweeping slowly; the child DRAGS the rake over the slab
-## and the concrete comes up the form to it, a stroke at a time, from the fuller
-## cells toward the kerb. It ends when every cell is up to grade.
-##
-## This is the "mini game kind of like the water and broom lines where you have
-## to fill in all the drive way" the user asked for, and it is also simply how a
+	# No gold ring over a parked truck with nothing left to hold while the chute
+	# swings out.
+	runner.mute_arrow(config.chute_out_time + 0.2)
+	site.sfx.play_group(SOUND_RAM)
+	await _ease(runner, config.chute_out_time, func(k: float) -> void:
+		mixer.set_chute(0.0, k * config.chute_fold_max))
 ## crew whose truck cannot get onto the slab does it: pull the mud.
 func rake_pull(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 		tool: Node3D, config: SiteConfig) -> void:
@@ -984,7 +804,13 @@ func rake_pull(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	# Still pouring, still not drawn, whatever beat came before this one (a posed
 	# rake starts here cold).
 	mixer.spin_drum(config.drum_rps)
-	mixer.show_only(["Chute"])
+	# The truck STAYS DRAWN while the child rakes. It was hidden to everything
+	# but its chute because the beat before this one looked up the drive from
+	# under the truck itself; that beat is gone (the playtest of 2026-09-16), and
+	# the PULL shot looks DOWN the drive from the garage door - so the mixer is
+	# at the far end of the picture, pouring, which is the thing the note asked
+	# for: "just have the truck back in and pour".
+	mixer.show_only([])
 	site.sfx.play_loop(SOUND_DRUM, "mixer")
 	site.sfx.play_loop(SOUND_CONCRETE, "concrete")
 	site.set_pour(true)
@@ -997,7 +823,7 @@ func rake_pull(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 		rake.hover_instant(fhead, Vector3.DOWN, (fhands - fhead).normalized())
 		rake.aim_handle_at(fhands)
 	await _scrub(runner, config, SOUND_RAKE, func(at: Vector3, dt: float) -> void:
-		var moved := drive.rake_to(at, config.rake_radius, config.rake_rate * dt, config.rake_reach, band_from)
+		var moved := drive.rake_fill(at, config.rake_radius)
 		if rake != null:
 			# The blade on the slab under the finger, the handle rising toward the
 			# child (the camera stands at the garage door, so +Y of the tool is up
@@ -1010,7 +836,11 @@ func rake_pull(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 			rake.hover_instant(rhead, Vector3.DOWN, (hands - rhead).normalized())
 			rake.aim_handle_at(hands)
 	, func() -> float:
-		return clampf(drive.fill_fraction() / config.pour_done, 0.0, 1.0) * config.scrub_done,
+		# A COUNT of squares with concrete in them, not a mean depth. The old
+		# rule ended on `fill_fraction` reaching `pour_done` 0.975 of full, and
+		# a cell at 94% of full is drawn EXACTLY like a finished one - so the
+		# last of the beat was invisible and the child was hunting a thickness.
+		return drive.covered_fraction(),
 		func() -> Vector3: return drive.rake_front_world(config.rake_reach, band_from), "rake",
 		func(dt: float) -> void:
 			# Between strokes the rake rests at the HINT - the front of the work -
@@ -1037,13 +867,12 @@ func rake_pull(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 			# The eye follows the concrete's front down the drive - only between
 			# strokes, so the ground never moves under a finger.
 			if not runner.held:
-				site.set_rake_view(drive.pour_front_z(), 3.0, dt))
+				site.set_rake_view(drive.pour_front_z(), 3.0, dt), 1.0)
 	mixer.spin_drum(0.0)
 	mixer.set_beacon_on(false)
 	mixer.set_chute_mud(false)
-	# The truck stays undrawn: it comes back FADED IN over the eye's ease out to
-	# the wide, in `mixer_leave` (the improvement plan's 0.6). Made whole here it
-	# popped into the top of the PULL frame the moment the rake was done.
+	# The truck is drawn throughout now (it is pouring, and the child can see it
+	# doing it), so there is nothing to fade back in when the rake is done.
 	site.set_pour(false)
 	site.sfx.stop_loop("concrete")
 	site.sfx.stop_loop("mixer")
@@ -1283,7 +1112,12 @@ func broom_finish(runner: JobRunner, subject: Node3D, _targets: Array[Node3D],
 	var last := [Vector3.INF]
 	var dir := [Vector3.ZERO]
 	await _scrub(runner, config, SOUND_BROOM, func(at: Vector3, dt: float) -> void:
-		var hands: Vector3 = site.hand_hold(Vector3(0.20, -0.80, 0.55))
+		# The hands ride FURTHER FORWARD than the rake's, so the handle between
+		# them and the head is shorter: stretched back to 0.55 m in front of the
+		# eye it read as a pole rather than a broom (the playtest of 2026-09-16,
+		# "Broom handle is too long"). Still below the frame, so the grip never
+		# ends in mid-air.
+		var hands: Vector3 = site.hand_hold(config.broom_hold)
 		if broom != null:
 			# The handle runs from the head to the child's HANDS, so it comes
 			# out of the bottom of the picture instead of ending in mid-air.

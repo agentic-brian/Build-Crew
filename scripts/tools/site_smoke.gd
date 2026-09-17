@@ -60,11 +60,11 @@ var _watch_kerb: bool = false
 ## The job's whole length in progress stops: the bar measures the child's
 ## minutes, not their taps (the plan's 3.6), and the three places that named
 ## this number (the .tres header, DESIGN 2, the code) had all disagreed.
-const TOTAL_STOPS := 83
+const TOTAL_STOPS := 77
 ## How many rows the job has: the plan's fifth session added seven (the trucks'
 ## held reverse legs, the plate, the kerb board's board and pegs, the cure and
 ## the strip).
-const STEP_COUNT := 25
+const STEP_COUNT := 22
 ## When the second push ended, so the forms' start can be timed against it.
 var _push_ended_ms: int = 0
 ## The save this run reads and writes: never the child's own (6.2).
@@ -130,7 +130,7 @@ func _run() -> void:
 	await _phase_compact()
 	await _phase_kerb()
 	await _phase_rebar()
-	await _phase_pour()
+	await _phase_call_mixer()
 	await _phase_rake()
 	await _phase_finishing()
 	await _phase_strip()
@@ -1148,81 +1148,37 @@ func _phase_base() -> void:
 	main._press(lawn_px, false)
 	_check(main.sfx.last_played == "horn" and not hud.arrow_nudged(),
 		"and a tap on the lawn while it comes is answered by nothing")
-	# It STOPS in the road and waits for the child to back it in (the plan's 1.8,
-	# decision 4): the reverse leg is the child's hold now.
-	var stopped := await _until(func() -> bool: return runner.current_step() != null \
-		and runner.current_step().verb == "back_dump", "the truck stops in the road")
-	_check(stopped, "the tipper comes down the street and stops, waiting to be backed in")
-	_save_is("back_dump", 1, 0, [], "on entering the back-in, a row the bar does not count,")
-	await _settled()
+	# It STOPS in the road, pauses, and BACKS ITSELF IN. The child used to wave
+	# it in with a held finger (the plan's 1.8, the user's own decision 4); the
+	# playtest of 2026-09-16 took that back - "backing trucks up with your finger
+	# doesn't feel good git rid of that".
 	var stop := main.street_stop("DumpTruck")
-	_check(truck.visible and not truck.is_driving() \
-		and Vector2(truck.global_position.x - stop.x, truck.global_position.z - stop.z).length() < 0.05,
-		"it waits in the road where play stops it (%s)" % str(truck.global_position))
-	_check(truck.beacon_on() and main.sfx.is_looping("arrive") and not main.sfx.is_looping("beeper"),
-		"engine ticking over and beacon turning, no beeper while it stands")
-	_check(runner.waiting_for_hold() and not runner.is_busy(), "and the beat is a HOLD waiting for a finger")
-	var pointer := main.get_node_or_null("Pointer") as SpotRings
-	var tail := main.arrival_hint("DumpTruck")
-	_check(pointer != null and pointer.lit() and pointer.points().size() > 0 \
-		and pointer.points()[0].distance_to(tail) < 0.2 and _hint_on_screen(),
-		"the gold ring stands on its tailgate, in the picture")
-	var p_wait := truck.global_position
-	await get_tree().create_timer(1.0).timeout
-	_check(truck.global_position.distance_to(p_wait) < 0.005, "and it waits: no finger, no movement")
-	# The lawn to the RIGHT of the drive: the left lawn behind the waiting truck is
-	# the truck on the screen (a press there did back it in, rightly).
-	var lawn2 := main.camera.unproject_position(Vector3(Driveway.CENTRE_X + 5.0, 0.0, SiteMain.STREET_Z - 5.0))
-	_check(not main.on_backing_truck(lawn2), "(the lawn point is off the truck on the screen)")
-	var missed := main._press(lawn2, true)
-	_check(not missed and main.sfx.last_played == "pop" and not runner.held,
-		"a press on the lawn is a miss, heard (%s)" % main.sfx.last_played)
-	main._press(lawn2, false)
-	var truck_mid := main.camera.unproject_position(main._world_box(truck).get_center())
-	var rolled_in := truck.rolled_m()
-	var took := main._press(truck_mid, true)
-	_check(took and runner.held, "a finger ON the truck backs it in")
-	_check(main.sfx.is_looping("beeper"), "and it beeps from the frame it moves")
-	await get_tree().create_timer(0.6).timeout
-	_check(truck.path_k() > 0.0 and truck.rolled_m() < rolled_in - 0.05,
-		"tail first, its wheels turning backwards (k %.2f, rolled %.2f m)" % [truck.path_k(), truck.rolled_m() - rolled_in])
-	await _until(func() -> bool: return truck.path_k() > 0.35, "half way back")
-	var k_lift := truck.path_k()
-	main._press(truck_mid, false)
-	await get_tree().create_timer(main.config.back_ramp + 0.25).timeout
-	# Letting go STOPS it: only the ramp's short coast, never the tap's burst on
-	# top of a real hold (the verification pass measured about two metres more).
-	_check(truck.path_k() >= k_lift and truck.path_k() < k_lift + 0.08,
-		"let go, it comes to rest within its short coast and never rolls back (k %.3f -> %.3f)" % [k_lift, truck.path_k()])
-	var p_lift := truck.global_position
-	await get_tree().create_timer(0.3).timeout
-	_check(truck.global_position.distance_to(p_lift) < 0.005 and not main.sfx.is_looping("beeper") \
-		and main.sfx.is_looping("arrive"),
-		"let go, it rolls to a stop where it is and the beeper stops (%.3f m)" % truck.global_position.distance_to(p_lift))
-	_check(runner.current_step().verb == "back_dump" and runner.is_busy(), "and waits there for the finger again")
-	_check(pointer.lit() and pointer.points()[0].distance_to(main.arrival_hint("DumpTruck")) < 0.2,
-		"the ring stands on the truck where it stopped, not where it was")
-	var truck_now := main.camera.unproject_position(main._world_box(truck).get_center())
-	var k_stop := truck.path_k()
-	_check(main._press(truck_now, true), "a new press on it carries on")
-	await get_tree().create_timer(0.5).timeout
-	_check(truck.path_k() > k_stop and (not pointer.lit() or pointer.points()[0].distance_to(main.arrival_hint("DumpTruck")) < 0.2),
-		"from where it stopped, and the ring does not hang where it was while it backs away (k %.2f -> %.2f)" % [k_stop, truck.path_k()])
+	var paused := await _until(func() -> bool: return truck.visible and not truck.is_driving() \
+		and Vector2(truck.global_position.x - stop.x, truck.global_position.z - stop.z).length() < 0.4,
+		"the truck stops in the road")
+	_check(paused, "the tipper comes down the street and STOPS, the way a driver does before reversing")
+	_check(truck.beacon_on() and main.sfx.is_looping("arrive"),
+		"engine ticking over and beacon turning while it stands")
+	_check(not runner.waiting_for_hold(),
+		"and NO beat asks the child to hold it in: the reverse is the truck's own")
+	# It reverses by itself, beeping, and the beeper stops when it does.
+	var reversed := await _until(func() -> bool: return truck.global_position.z < stop.z - 1.0 \
+		or (runner.current_step() != null and runner.current_step().verb == "tip_gravel"),
+		"the truck backs itself in")
+	_check(reversed, "it backs itself up the drive")
 	var tip_next := await _until(func() -> bool: return runner.current_step() != null \
 		and runner.current_step().verb == "tip_gravel", "the tipper backed all the way in")
-	_check(tip_next, "held, it backs all the way up the drive")
-	_check(not runner.held, "and a finger still down at the stop does not start the tip on its own")
+	_check(tip_next, "all the way, with no finger on it at any point")
+	_check(not runner.held, "and the tip does not start on its own")
 	_check(not main.sfx.is_looping("beeper") and main.sfx.last_played == "hiss",
 		"and stops with a hiss of the brakes, the beeper off (%s)" % main.sfx.last_played)
 	await get_tree().create_timer(0.5).timeout
 	_check(drive.gravel_k() < 0.001 and truck.load_k() > 0.9, "nothing tips until a new press (base %.2f)" % drive.gravel_k())
-	# And the tip has its ring with no further input - the finger never lifted
-	# (the GO key's case): a mute across the step boundary used to leave it with
-	# none (the verification pass).
+	# And the tip has its own ring on the tailgate the moment the truck stops.
+	var tip_ring := main.get_node_or_null("Pointer") as SpotRings
 	var tip_at := runner.target_world()
-	_check(pointer.lit() and tip_at != Vector3.INF and pointer.points()[0].distance_to(tip_at) < 0.2,
-		"and the tip's own ring is up on the tailgate, with no lift and no new press")
-	main._press(truck_now, false)
+	_check(tip_ring != null and tip_ring.lit() and tip_at != Vector3.INF 		and tip_ring.points()[0].distance_to(tip_at) < 0.2,
+		"and the tip's own ring is up on the tailgate as soon as it is parked")
 	_check(not truck.beacon_on(), "and its beacon stops with it")
 	_check(truck.global_position.z < Driveway.Z_APRON + 4.0,
 		"it REVERSED up the drive, tail at the garage end (z %.2f)" % truck.global_position.z)
@@ -2030,8 +1986,13 @@ func _phase_rebar() -> void:
 
 # --- Phase 6: the pour ----------------------------------------------------------------------------
 
-func _phase_pour() -> void:
-	print("--- 6. the pour ---")
+## The mixer is CALLED and backs itself in. There is no pour beat any more: the
+## chute had four steering pads, the one control scheme in a job where every
+## other beat is a tap, a hold on the picture or a drag, and the playtest of
+## 2026-09-16 took them out ("forget chute controls.. just have the truck back in
+## and pour and move straight to raking it out").
+func _phase_call_mixer() -> void:
+	print("--- 6. the mixer is called ---")
 	var waiting := await _until(func() -> bool: return runner.waiting_button() == "call", "the button")
 	_check(waiting, "the green button asks for the mixer")
 	var tipper_gone := main.machine("DumpTruck")
@@ -2044,229 +2005,102 @@ func _phase_pour() -> void:
 	await _until(func() -> bool: return mixer_in.visible \
 		and _on_screen(main._world_box(mixer_in).get_center()) and mixer_in.is_driving(), "the mixer in the picture")
 	await _frames(5)
-	# A finger that lands on the mixer while it comes down the street and STAYS
-	# there backs it in the moment it stops - no second press (the plan's 1.8).
+	# A tap on the moving truck is still answered by the truck, which is the
+	# pillar the held back-in used to carry: the arrival is still a busy BUTTON
+	# step, so the horn still sounds.
 	var mixer_px := main.camera.unproject_position(main._world_box(mixer_in).get_center())
-	var kept_f := main._press(mixer_px, true)
-	_check(kept_f and main.sfx.last_played == "horn",
-		"a finger pressed on the coming mixer honks it and is kept (%s)" % main.sfx.last_played)
-	var carried := await _until(func() -> bool: return runner.current_step() != null \
-		and runner.current_step().verb == "back_mixer" and runner.held, "the finger backs the mixer in")
-	_check(carried, "and the same finger, still down when it stops, backs it to the kerb")
-	var mroute := main.back_route("ConcreteTruck", main.street_stop("ConcreteTruck"))
-	var mdir := mroute[0] - mroute[1]
-	var mwant := rad_to_deg(atan2(mdir.x, mdir.z))
-	_check(absf(wrapf(rad_to_deg(mixer_in.rotation.y) - mwant, -180.0, 180.0)) < 2.0,
-		"already turned the way it backs, so the first held frame does not snap it (%.1f vs %.1f deg)"
-		% [rad_to_deg(mixer_in.rotation.y), mwant])
-	await get_tree().create_timer(0.5).timeout
-	_check(main.sfx.is_looping("beeper") and mixer_in.path_k() > 0.0, "the mixer beeps while it backs to the kerb")
-	await _until(func() -> bool: return runner.current_step() != null \
-		and runner.current_step().verb == "pour_chute", "the pour beat")
-	var mixer := main.machine("ConcreteTruck")
-	var eye_moving := main.rig.is_moving()
+	main._press(mixer_px, true)
+	_check(main.sfx.last_played == "horn",
+		"a tap on the coming mixer still honks it (%s)" % main.sfx.last_played)
 	main._press(mixer_px, false)
-	# The truck stays drawn while the eye flies down to the chute and goes only
-	# once it has arrived (the improvement plan's 0.6): a truck that blinked out
-	# of the wide picture left its chute hanging in the air, a teleport in front
-	# of the child.
-	_check(eye_moving, "the eye is still on its way down to the chute")
-	_check(_drawn(mixer, "Drum") > 0, "and the truck is drawn until it gets there")
-	_check(mixer.visible, "the mixer is on site")
-	# ON THE ROAD, tail to the drive, and its rearmost tyre past the kerb: the
-	# steel is down and no wheel goes over it (DESIGN 2a).
-	_check(absf(rad_to_deg(mixer.rotation.y)) < 8.0,
-		"nose to the far kerb, tail to the drive (%.0f deg)" % rad_to_deg(mixer.rotation.y))
-	var tyre := mixer.global_position.z - mixer.rear_overhang()
-	_check(tyre > SiteMain.KERB_Z - 0.02,
-		"standing on the ROAD with its rear tyre past the kerb, never on the steel (tyre z %.2f, kerb %.2f)"
-			% [tyre, SiteMain.KERB_Z])
-	# And watched for the whole pour and the whole rake: no wheel on the pad.
-	_on_pad_frames[0] = 0
-	_watch_pad = true
-	_watch_wheels(mixer)
+	# ...and it backs ITSELF in. The child is not the banksman any more ("backing
+	# trucks up with your finger doesn't feel good git rid of that").
+	var backed := await _until(func() -> bool: return not mixer_in.is_driving() \
+		and mixer_in.global_position.z < Driveway.Z_KERB + 7.0, "the mixer backs itself in")
+	_check(backed, "the mixer backs itself onto the kerb end, with no finger on it")
+	_check(not runner.waiting_for_hold(),
+		"and no beat ever asked the child to hold it in")
+	# The chute swings out on the call, where the held reverse used to carry it.
+	await _until(func() -> bool: return mixer_in.chute_out() > 0.5 \
+		if mixer_in.has_method("chute_out") else true, "the chute")
+	# THE PADS ARE GONE. Not "not shown now" - no beat in the job can raise them.
+	_check(SiteVerbs.PAD_VERBS.is_empty(),
+		"no beat in this job steers anything with pads (%d)" % SiteVerbs.PAD_VERBS.size())
 	for key: String in ["up", "down", "left", "right"]:
-		_check(hud.pad_visible(key), "the %s pad is up for the chute" % key)
-	await _settled()
-	# The user's visual trick: the truck is out of the way and the chute is not.
-	_check(_drawn(mixer, "Drum") == 0, "the truck itself is not drawn during the pour")
-	_check(_drawn(mixer, "Chute") > 0, "but the chute the child is steering is")
-	# Nor its beacon, nor the light that hangs under it (4.5): an amber glow over
-	# the chute with no truck would be a light from nowhere.
-	var beacon_n := mixer.node_for("Beacon")
-	var beacon_l := beacon_n.get_node_or_null("BeaconLight") as Node3D if beacon_n != null else null
-	_check(beacon_n != null and beacon_l != null and not beacon_n.is_visible_in_tree() and not beacon_l.is_visible_in_tree(),
-		"and neither is the mixer's beacon or its light")
-	var view := main.get_node_or_null("PourView") as Node3D
-	_check(view != null, "and the camera hangs off the pour, not off the chute")
-	# Right up by the BACK of the chute, on the truck's side of it: the truck has
-	# to be behind the camera, or the child can see that it is missing.
-	var spout := mixer.spout_world()
-	var eye := main.camera.global_position
-	_check(eye.z > spout.z + 0.8,
-		"the camera is behind the chute head (eye z %.2f, spout z %.2f)" % [eye.z, spout.z])
-	var head := mixer.node_for("Chute")
-	var gap := eye.distance_to(head.global_position) if head != null else 99.0
-	# Within about two chute-lengths of its head. The number is a floor, not a
-	# composition: it is what stops this drifting back out to the nine metres it
-	# was watched from before, where the whole truck was in shot.
-	_check(gap < 3.4, "right up at the chute's own head (%.2f m from it)" % gap)
-	_check(_on_screen(spout), "with the spout itself in the picture")
-	# Nothing of the truck is DRAWN, so nothing of it can be in shot - which is
-	# the whole trick, and it is asserted above by the mesh counts.
-	# Swinging the chute must not drag the camera sideways or shunt it along the
-	# drive: the pads have to mean what they say.
-	# The idle hint (round 7: it has to be INSIDE the picture; round 12: only on
-	# a cell that LOOKS short, under half). Checked NOW, while the band is still
-	# nearly empty: with the chute parked the whole band is over half within four
-	# seconds of pouring, and after that the rule rightly shows nothing - which
-	# is where this check used to stand, passing only when the frames happened
-	# to run at the right speed. The delay is shortened for the test the way the
-	# white arrow's is above; the beat reads it every frame.
-	var pointer := main.get_node_or_null("Pointer") as SpotRings
-	var hint_delay_was: float = main.config.chute_hint_delay
-	main.config.chute_hint_delay = 0.8
-	await get_tree().create_timer(1.3).timeout
-	await _frames(3)
-	_check(_hint_on_screen(), "after a pause the pour's hint stands on a short cell, inside the frame")
-	main.config.chute_hint_delay = hint_delay_was
-	# And the white MIME stands on the PAD that would take the pour there,
-	# miming a hold (the plan's 2.1): the one beat that had no teacher.
-	var mime_delay_was: float = hud.hint_delay
-	hud.hint_delay = 0.3
-	await get_tree().create_timer(0.7).timeout
-	var pad_key: String = main._pour_hint_pad()
-	var prect := hud.pad_rect(pad_key)
-	_check(hud.hint_visible() and hud.hint_kind() == SiteHud.Hint.HOLD,
-		"the white mime is up over a pad, miming a hold (%s)" % pad_key)
-	_check(prect.has_area() and hud.hint_position().distance_to(prect.get_center()) < prect.size.x * 1.2,
-		"on the %s pad, the one that takes the pour toward the emptiest cell" % pad_key)
-	hud.hint_delay = mime_delay_was
-	# A tap on the picture during the pour is answered by that pad kicking.
-	var slab_px := main.camera.unproject_position(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_KERB - 2.0))
-	main._press(slab_px, true)
-	main._press(slab_px, false)
-	var pad_ctl: Control = hud._pads.get(pad_key)
-	_check(main.sfx.last_played == "pop" and pad_ctl != null and pad_ctl.scale.x > 1.05,
-		"and a tap on the picture is heard and kicks that pad")
-	var was_view := view.position.z
-	hud.press_pad("left", true)
-	await _frames(10)
-	_check(pointer != null and not pointer.lit(), "and a pad press takes it away")
-	_check(not hud.hint_visible(), "the white mime too")
-	await _frames(80)
-	hud.press_pad("left", false)
-	await _frames(20)
-	_check(absf(view.position.z - was_view) < 0.25,
-		"swinging the chute leaves the camera where it is (%.2f -> %.2f)"
-			% [was_view, view.position.z])
-	await _frames(90)
-	_check(drive.fill_fraction() > 0.0, "concrete is going in (%.3f)" % drive.fill_fraction())
-	_save_is("pour_chute", 1, 0, [], "part way through the pour, a hold is kept at its start:")
-	# The control the user asked for: forward and backwards up the drive.
-	var start_z := mixer.global_position.z
-	var view_z := view.position.z if view != null else 0.0
-	hud.press_pad("up", true)
-	await _frames(200)
-	hud.press_pad("up", false)
-	var out_z := mixer.global_position.z
-	# UP means UP the picture (the plan's 2.1): the truck creeps back toward
-	# the kerb and the pour goes up the drive, toward the garage.
-	_check(out_z < start_z - 0.2,
-		"the UP pad takes the pour UP the drive, toward the garage (%.2f -> %.2f)" % [start_z, out_z])
-	_check(view != null and view.position.z < view_z - 0.15,
-		"and the camera walked up with it (%.2f -> %.2f)" % [view_z, view.position.z if view != null else 0.0])
-	hud.press_pad("down", true)
-	await _frames(200)
-	hud.press_pad("down", false)
-	_check(mixer.global_position.z > out_z + 0.2,
-		"and DOWN brings it back toward the kerb (%.2f -> %.2f)" % [out_z, mixer.global_position.z])
-	# Now fill the kerb end the way a competent pair would: look at where the
-	# band the chute can reach is emptiest, swing the chute toward it and creep the
-	# truck so the spout is over it. A blind sweep was not a test of anything - it
-	# wasted most of the load on the grass past the kerb and then reported the
-	# mechanic broken.
-	var reach := mixer.global_position.z - mixer.pour_point_world(Driveway.GRADE).z
-	var band_from := main.mixer_stand_z() - reach - 0.35
-	var swept := 0
-	while drive.band_fraction(band_from) < main.config.band_done and swept < 420:
-		var want: Vector3 = drive.emptiest_in_band(band_from)
-		var dx := want.x - Driveway.CENTRE_X
-		var dz := want.z - mixer.pour_point_world(Driveway.GRADE).z
-		if dx < -0.25:
-			hud.press_pad("left", true)
-		elif dx > 0.25:
-			hud.press_pad("right", true)
-		if dz > 0.35:
-			hud.press_pad("down", true)
-		elif dz < -0.35:
-			hud.press_pad("up", true)
-		await _frames(24)
-		for key: String in ["up", "down", "left", "right"]:
-			hud.press_pad(key, false)
-		swept += 1
-	var filled := drive.band_fraction(band_from) >= main.config.band_done
-	_check(filled, "the kerb end of the form filled (%.3f after %d sweeps)" % [drive.band_fraction(band_from), swept])
-	if not filled:
-		# WHICH cells are dry, not just that some are.
-		print(drive.fill_report())
-	_check(drive.fill_fraction() < 0.75,
-		"and the rest of the form is still waiting for the rake (%.2f of it full)" % drive.fill_fraction())
-	await _until(func() -> bool: return runner.current_step() != null \
-		and runner.current_step().verb != "pour_chute", "the pour ends")
-	_check(runner.current_step() != null and runner.current_step().verb == "rake_pull",
-		"and the come-along is next")
+		_check(not hud.pad_visible(key), "the %s pad is not on the screen" % key)
 
-
-# --- Phase 6b: the come-along ------------------------------------------------------------------------
 
 func _phase_rake() -> void:
-	print("--- 6b. the come-along ---")
+	print("--- 6b. spreading it ---")
 	var mixer := main.machine("ConcreteTruck")
+	# The phase before this one no longer ends on a held reverse, so it hands
+	# over while the mixer is still arriving: wait for the row itself.
+	var on_rake := await _until(func() -> bool: return runner.current_step() != null \
+		and runner.current_step().verb == "rake_pull", "the spread")
+	_check(on_rake, "the mixer is in and the rake is the child's to drag")
 	_check(runner.current_step().shot == "PULL", "the rake has its own shot, from the garage door")
 	_check(runner.waiting_for_hold(), "and it is dragged")
 	await _settled()
-	_check(_drawn(mixer, "Drum") == 0, "the truck is still not drawn")
+	_check(_drawn(mixer, "Drum") > 0,
+		"the truck is IN the picture, pouring, while the child spreads it")
 	_check(main.camera.global_position.z < Driveway.Z_APRON + 0.5,
 		"the eye stands at the garage end looking down the drive (z %.2f)" % main.camera.global_position.z)
 	var apron_before := drive.cell_fill(2, 0)
 	_check(apron_before < 0.02, "nothing has reached the apron end yet (%.3f)" % apron_before)
-	# Dragging at the FAR end draws on the chute's heap at the kerb, from
-	# anywhere (the user's third playtest: "it was hard to tell where I was
-	# supposed to spread it"): the sandy apron cell goes grey under the finger.
+	# DRAG OVER A SQUARE AND THAT SQUARE HAS CONCRETE IN IT. Not a relay off a
+	# heap, not a depth that creeps up - the cell goes to FULL under the head, at
+	# once ("when you drag over a sqare it puts the concreate there", the
+	# playtest of 2026-09-16).
+	var full := Driveway.GRADE - Driveway.BASE_TOP
 	main.set_work_cursor(Vector3(Driveway.CENTRE_X, Driveway.GRADE, Driveway.Z_APRON + 0.4))
 	runner.hold(true)
-	await _frames(60)
-	_check(drive.cell_fill(2, 0) > 0.01,
-		"raking at the apron draws concrete up from the heap at the kerb (%.3f)" % drive.cell_fill(2, 0))
+	await _frames(6)
+	_check(drive.cell_fill(2, 0) >= full - 0.001,
+		"one stroke over a square fills it, outright (%.3f of %.3f)" % [drive.cell_fill(2, 0), full])
+	# And there is NOTHING half done anywhere: every cell is either bare or full,
+	# so what is left to do is a colour and never a thickness ("it is hard to
+	# determine what still needs raked because you are looking for thickness").
+	var part := 0
+	for iz in range(Driveway.CELLS_Z):
+		for ix in range(Driveway.CELLS_X):
+			var v := drive.cell_fill(ix, iz)
+			if v > 0.001 and v < full - 0.001:
+				part += 1
+	_check(part == 0, "and no square is ever PART full: nothing to judge by depth (%d partial)" % part)
 	# The finger up and still: the hint has to be inside this shot too.
 	runner.hold(false)
 	main.clear_work_cursor()
 	await get_tree().create_timer(main.config.chute_hint_delay + 0.6).timeout
 	await _settled()
 	_check(_hint_on_screen(), "and after a pause the come-along's hint is inside the frame")
-	# A competent child: keep the rake at the FRONT of the concrete and it comes
-	# up the form a stroke at a time, as fast as the chute supplies it.
-	var reach: int = main.config.rake_reach
+	# A competent child: sweep the rake up and down the form until every square
+	# has concrete in it. Any path does - that is the whole point of the change -
+	# so the suite walks the plainest one there is.
 	var pulled := false
 	var pull_started := Time.get_ticks_msec()
-	for frame in range(FRAME_CAP):
-		var front := drive.rake_front_world(reach)
-		main.set_work_cursor(Vector3(front.x, Driveway.GRADE, front.z - 0.2))
-		runner.hold(true)
-		await get_tree().process_frame
-		if drive.fill_fraction() >= main.config.pour_done:
-			pulled = true
+	var lanes := [Driveway.CENTRE_X - 1.2, Driveway.CENTRE_X, Driveway.CENTRE_X + 1.2]
+	for pass_i in range(12):
+		var lane: float = lanes[pass_i % lanes.size()]
+		for step_i in range(26):
+			var t := float(step_i) / 25.0
+			var z: float = lerpf(Driveway.Z_APRON + 0.3, Driveway.Z_KERB - 0.3, t if pass_i % 2 == 0 else 1.0 - t)
+			main.set_work_cursor(Vector3(lane, Driveway.GRADE, z))
+			runner.hold(true)
+			await get_tree().process_frame
+			if drive.covered_fraction() >= 0.999:
+				pulled = true
+				break
+		if pulled:
 			break
-	_check(pulled, "pulling from the front fills the whole form (%.3f)" % drive.fill_fraction())
-	if not pulled:
-		print(drive.fill_report())
+	_check(pulled, "sweeping the rake over the form fills every square (%.3f covered)"
+		% drive.covered_fraction())
 	# The finger is the only bottleneck (the plan's 2.4): the truck supplies
 	# faster than the rake draws, so a competent pull is seconds, not a trickle.
 	var pull_s := float(Time.get_ticks_msec() - pull_started) / 1000.0
-	_check(pull_s < 25.0, "and it never waited on the truck (%.1f s of pulling)" % pull_s)
-	_check(drive.cell_fill(2, 0) > (Driveway.GRADE - Driveway.BASE_TOP) * 0.9,
-		"including the apron end (%.3f)" % drive.cell_fill(2, 0))
+	_check(pull_s < 25.0, "and it never waited on the truck (%.1f s of spreading)" % pull_s)
+	_check(drive.covered_cells() == Driveway.CELLS_X * Driveway.CELLS_Z,
+		"every square of the form, counted (%d of %d)"
+		% [drive.covered_cells(), Driveway.CELLS_X * Driveway.CELLS_Z])
 	runner.hold(false)
 	main.clear_work_cursor()
 	await _until(func() -> bool: return runner.current_step() != null \
